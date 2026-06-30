@@ -333,7 +333,10 @@ async function startServer() {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
           const geminiResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `${persona_prompt}\nUsuario: ${user_input}\nRespuesta:`,
+            contents: `Usuario: ${user_input}\nRespuesta:`,
+            config: {
+              systemInstruction: persona_prompt,
+            }
           });
           text_response = geminiResponse.text || "";
         } catch (apiErr) {
