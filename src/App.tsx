@@ -12,6 +12,7 @@ import { jsPDF } from 'jspdf';
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
 import { playClick, playStart, playReward } from './utils/audio';
+import { shuffle } from "./utils/shuffle";
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 
 type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
@@ -2247,7 +2248,7 @@ export default function App() {
                                     const originalWord = currentExercise.options[currentExercise.answer];
                                     const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
                                     const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
+                                    setUnscrambleOptions(shuffle(words));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
