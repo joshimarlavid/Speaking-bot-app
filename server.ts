@@ -209,9 +209,8 @@ function generateResilientOfflineCard(vocab: string, topic?: string) {
   const word = vocab.trim().replace(/[()]/g, "");
   const wordLower = word.toLowerCase();
   
-  const match = Object.keys(OFFLINE_DICTIONARY).find(k => k.toLowerCase() === wordLower);
-  if (match) {
-    return OFFLINE_DICTIONARY[match];
+  if (Object.prototype.hasOwnProperty.call(OFFLINE_DICTIONARY, wordLower)) {
+    return OFFLINE_DICTIONARY[wordLower];
   }
 
   // fallback templates based on part of speech guess
