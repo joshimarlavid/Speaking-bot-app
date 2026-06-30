@@ -333,8 +333,12 @@ export default function App() {
       const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
       // Clean up multiple spaces and split
       const words = fullSentence.split(/\s+/).filter(Boolean);
-      // Randomly shuffle
-      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      // Randomly shuffle using Fisher-Yates
+      const shuffled = [...words];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
