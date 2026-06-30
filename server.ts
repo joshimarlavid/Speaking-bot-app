@@ -251,9 +251,8 @@ function generateResilientOfflineCard(vocab: string, topic?: string) {
   };
 }
 
-async function startServer() {
+export async function createApp() {
   const app = express();
-  const PORT = 3000;
 
   // Use JSON middleware for POST requests
   app.use(express.json());
@@ -577,9 +576,22 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
     });
   }
 
+  return app;
+}
+
+export async function startServer(port = 3000) {
+  const app = await createApp();
+  const PORT = port;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-startServer();
+// Only start the server if this file is run directly (not imported as a module)
+// Using an environment variable or simply relying on importing createApp for tests is safer.
+// Since tests will import `createApp`, we shouldn't automatically start the server.
+
+// A simpler way to check if it's the main module
+if (process.argv[1] && process.argv[1].includes('server.ts')) {
+  startServer();
+}
