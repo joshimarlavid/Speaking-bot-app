@@ -1,113 +1,235 @@
-import { renderHook, act } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { useLiveAPI } from './useLiveAPI';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock the Live API Client dependency
+// --- Mocks ---
+
+// Mock GoogleGenAI
 const mockSendRealtimeInput = vi.fn();
-const mockLiveSession = {
-  sendRealtimeInput: mockSendRealtimeInput,
-  close: vi.fn(),
-};
-
-// Properly mock the GoogleGenAI and ai.live.connect structure
-const mockLiveConnect = vi.fn().mockResolvedValue(mockLiveSession);
-const mockAiInstance = {
-  live: {
-    connect: mockLiveConnect
-  }
-};
+const mockClose = vi.fn();
+let mockSessionOnMessage: any = null;
 
 vi.mock('@google/genai', () => {
   return {
-    Modality: { AUDIO: 'AUDIO' },
-    GoogleGenAI: class {
-      constructor() {
-        return mockAiInstance;
-      }
+    Modality: {
+      TEXT: 'TEXT',
+      AUDIO: 'AUDIO',
+      IMAGE: 'IMAGE'
+    },
+    GoogleGenAI: class MockGoogleGenAI {
+      models = {
+        generateContent: vi.fn(),
+      };
+      live = {
+        connect: vi.fn((config) => {
+          // It's under config.callbacks in the hook
+          if (config.callbacks && config.callbacks.onmessage) {
+             (global as any).mockSessionOnMessage = config.callbacks.onmessage;
+          } else if (config.onmessage) {
+             (global as any).mockSessionOnMessage = config.onmessage;
+          }
+          const session = {
+            sendRealtimeInput: vi.fn(),
+            close: vi.fn()
+          };
+          if (config.callbacks && config.callbacks.onopen) {
+             setTimeout(() => config.callbacks.onopen(), 0);
+          }
+          return Promise.resolve(session);
+        })
+      };
     }
   };
 });
 
-describe('useLiveAPI', () => {
-  let originalMediaDevices: any;
-  let originalAudioContext: any;
-  let originalConsoleWarn: any;
+// Mock AudioContext and nodes
+const mockCreateMediaStreamSource = vi.fn();
+const mockCreateScriptProcessor = vi.fn();
+const mockCreateGain = vi.fn();
+const mockAudioDestination = {};
+const mockScriptProcessorNode = {
+  connect: vi.fn(),
+  disconnect: vi.fn(),
+  onaudioprocess: null
+};
+const mockGainNode = {
+  gain: { value: 1 },
+  connect: vi.fn(),
+  disconnect: vi.fn()
+};
+const mockMediaStreamSource = {
+  connect: vi.fn(),
+  disconnect: vi.fn()
+};
 
+class MockAudioContext {
+  createMediaStreamSource = mockCreateMediaStreamSource.mockReturnValue(mockMediaStreamSource);
+  createScriptProcessor = mockCreateScriptProcessor.mockReturnValue(mockScriptProcessorNode);
+  createGain = mockCreateGain.mockReturnValue(mockGainNode);
+  destination = mockAudioDestination;
+  close = vi.fn();
+  currentTime = 0;
+  createBuffer = vi.fn(() => ({
+    getChannelData: vi.fn(() => new Float32Array(0)),
+    duration: 1
+  }));
+  createBufferSource = vi.fn(() => ({
+    buffer: null,
+    connect: vi.fn(),
+    start: vi.fn()
+  }));
+}
+(window as any).AudioContext = MockAudioContext;
+(window as any).webkitAudioContext = MockAudioContext;
+
+// Mock navigator.mediaDevices
+const mockGetUserMedia = vi.fn();
+Object.defineProperty(navigator, 'mediaDevices', {
+  value: {
+    getUserMedia: mockGetUserMedia
+  },
+  writable: true
+});
+
+describe('useLiveAPI', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    originalMediaDevices = navigator.mediaDevices;
-    originalAudioContext = window.AudioContext;
-    originalConsoleWarn = console.warn;
-    // Suppress console.warn about microphone not found during test run
-    console.warn = vi.fn();
+    mockSessionOnMessage = null;
+    mockGetUserMedia.mockResolvedValue({
+      getTracks: () => [{ stop: vi.fn() }]
+    });
+    // Set env var required by useLiveAPI
+    process.env.GEMINI_API_KEY = 'test-api-key';
   });
 
   afterEach(() => {
-    Object.defineProperty(navigator, 'mediaDevices', {
-      value: originalMediaDevices,
-      writable: true,
-      configurable: true,
-    });
-    window.AudioContext = originalAudioContext;
-    console.warn = originalConsoleWarn;
+    delete process.env.GEMINI_API_KEY;
   });
 
-  it('should fall back to text mode and set hasMicrophone to false when microphone is unavailable', async () => {
-    // Setup the mock to reject the getUserMedia promise
-    const getUserMediaMock = vi.fn().mockRejectedValue(new Error('Microphone not found or permission denied'));
+  it('should initialize with default state', () => {
+    const { result } = renderHook(() => useLiveAPI());
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.error).toBeNull();
+    expect(result.current.userTranscript).toBe('');
+    expect(result.current.aiTranscript).toBe('');
+    expect(result.current.hasMicrophone).toBe(true);
+  });
 
-    Object.defineProperty(navigator, 'mediaDevices', {
-      value: {
-        getUserMedia: getUserMediaMock,
-      },
-      writable: true,
-      configurable: true,
+  it('should handle successful connection with microphone', async () => {
+    const { result } = renderHook(() => useLiveAPI());
+
+    act(() => {
+      result.current.connect('John', { name: 'Teacher', description: 'desc' }, { title: 'Tenses', description: 'desc', grammar: 'grammar', vocabulary: [] }, 'student');
     });
 
-    // Provide a class for AudioContext to avoid "is not a constructor"
-    class AudioContextMock {
-      createMediaStreamSource = vi.fn();
-      createScriptProcessor = vi.fn();
-      createGain = vi.fn();
-      destination = {};
-      currentTime = 0;
-      close = vi.fn();
-    }
-    window.AudioContext = AudioContextMock as any;
+    expect(result.current.isConnecting).toBe(true);
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    expect(result.current.isConnecting).toBe(false);
+    expect(result.current.hasMicrophone).toBe(true);
+    expect(mockGetUserMedia).toHaveBeenCalled();
+  });
+
+  it('should handle successful connection without microphone (fallback to text mode)', async () => {
+    // Mock getUserMedia to fail
+    mockGetUserMedia.mockRejectedValueOnce(new Error('Microphone not found'));
 
     const { result } = renderHook(() => useLiveAPI());
 
-    // Check initial state
-    expect(result.current.hasMicrophone).toBe(true);
-
-    const mockRole = {
-      description: 'Test Role',
-      winCondition: 'Win',
-      loseCondition: 'Lose',
-      voice: 'Test Voice'
-    };
-    const mockTopic = {
-      grammar: 'Test Grammar',
-      vocabulary: ['word1', 'word2']
-    };
-
-    // Call connect()
-    await act(async () => {
-      await result.current.connect('Test Student', mockRole as any, mockTopic as any, null);
+    act(() => {
+      result.current.connect('John', { name: 'Teacher', description: 'desc' }, { title: 'Tenses', description: 'desc', grammar: 'grammar', vocabulary: [] }, 'student');
     });
 
-    // We need to simulate the `onopen` callback since the mock won't automatically call it
-    const connectArgs = mockLiveConnect.mock.calls[0][0];
-    await act(async () => {
-      if (connectArgs.callbacks && connectArgs.callbacks.onopen) {
-        await connectArgs.callbacks.onopen();
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    expect(result.current.hasMicrophone).toBe(false);
+    // Connection still succeeds, just no mic
+    expect(result.current.error).toBeNull();
+  });
+});
+
+  it('should be able to send text messages', async () => {
+    const { result } = renderHook(() => useLiveAPI());
+
+    act(() => {
+      result.current.connect('John', { name: 'Teacher', description: 'desc' }, { title: 'Tenses', description: 'desc', grammar: 'grammar', vocabulary: [] }, 'student');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    const testMessage = "Hello from test";
+
+    // We need to wait for the sessionPromise inside connect to resolve before sendTextMessage can work.
+    // In our mock, onopen is triggered, which resolves things, but the internal sessionRef.current is set AFTER await sessionPromise.
+    // Our mock resolves sessionPromise synchronously essentially because of setTimeout, but we should make sure.
+    await waitFor(() => {
+        expect((result.current as any).error).toBeNull();
+    });
+
+    act(() => {
+      result.current.sendTextMessage(testMessage);
+    });
+
+    // Check if user transcript was updated
+    expect(result.current.userTranscript.trim()).toBe(testMessage);
+  });
+
+  it('should update aiTranscript when receiving messages', async () => {
+    const { result } = renderHook(() => useLiveAPI());
+
+    act(() => {
+      result.current.connect('John', { name: 'Teacher', description: 'desc' }, { title: 'Tenses', description: 'desc', grammar: 'grammar', vocabulary: [] }, 'student');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    // Simulate incoming message
+    act(() => {
+      if ((global as any).mockSessionOnMessage) {
+        (global as any).mockSessionOnMessage({
+          serverContent: {
+            modelTurn: {
+              parts: [{ text: "Hello there!" }]
+            }
+          }
+        });
       }
     });
 
-    // Check that getUserMedia was called
-    expect(getUserMediaMock).toHaveBeenCalled();
-
-    // Verify fallback to text mode: hasMicrophone should be set to false
-    expect(result.current.hasMicrophone).toBe(false);
+    expect(result.current.aiTranscript).toContain("Hello there!");
   });
-});
+
+  it('should clean up on disconnect', async () => {
+    const { result } = renderHook(() => useLiveAPI());
+
+    act(() => {
+      result.current.connect('John', { name: 'Teacher', description: 'desc' }, { title: 'Tenses', description: 'desc', grammar: 'grammar', vocabulary: [] }, 'student');
+    });
+
+    await waitFor(() => {
+      expect(result.current.isConnected).toBe(true);
+    });
+
+    // Mock tracks stop
+    const mockStop = vi.fn();
+    mockGetUserMedia.mockResolvedValueOnce({
+      getTracks: () => [{ stop: mockStop }]
+    });
+
+    act(() => {
+      result.current.disconnect();
+    });
+
+    expect(result.current.isConnected).toBe(false);
+    expect(result.current.isConnecting).toBe(false);
+  });
