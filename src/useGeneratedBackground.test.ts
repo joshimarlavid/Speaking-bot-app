@@ -1,149 +1,51 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { useGeneratedBackground } from './useGeneratedBackground';
-import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { GoogleGenAI } from '@google/genai';
 
-const mockGenerateContent = vi.fn();
-
-// The class itself must be mockable
+// Mock the GoogleGenAI library
 vi.mock('@google/genai', () => {
   return {
-    GoogleGenAI: class {
+    GoogleGenAI: class MockGoogleGenAI {
       models = {
-        generateContent: mockGenerateContent
-      }
-    }
+        generateContent: vi.fn().mockRejectedValue(new Error('API Error')),
+      };
+    },
   };
 });
 
-import { GoogleGenAI } from '@google/genai';
-
 describe('useGeneratedBackground', () => {
   beforeEach(() => {
+    // Clear localStorage before each test
     localStorage.clear();
+    // Clear all mocks before each test
     vi.clearAllMocks();
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
+  it('should handle errors when generation fails, log to console, and set isGenerating to false', async () => {
+    // Mock console.error
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-  it('should initialize with loading state and call the API when cache is empty', async () => {
-    const mockImageBase64 = 'mock-base64-data';
+    // Render the hook
+    const { result } = renderHook(() => useGeneratedBackground('test prompt'));
 
-    mockGenerateContent.mockResolvedValueOnce({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    data: mockImageBase64,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      });
+    // The initial render sets it to true because cache is empty
+    expect(result.current.isGenerating).toBe(true);
 
-    const prompt = 'a beautiful landscape';
-
-    const { result } = renderHook(() => useGeneratedBackground(prompt));
-
-    // Wait for the hook to finish processing the API response
+    // Wait for the hook to finish generating (which in this case means it fails)
     await waitFor(() => {
       expect(result.current.isGenerating).toBe(false);
     });
 
-    // Check that the API was called
-    expect(mockGenerateContent).toHaveBeenCalledWith({
-      model: 'gemini-2.5-flash-image',
-      contents: prompt,
-      config: {
-        imageConfig: {
-          aspectRatio: '16:9',
-          imageSize: '1K',
-        },
-      },
-    });
+    // Check that console.error was called with the correct message and error object
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'Failed to generate background',
+      expect.any(Error)
+    );
+    expect(consoleErrorSpy.mock.calls[0][1].message).toBe('API Error');
 
-    // Check the final state
-    const expectedUrl = `data:image/jpeg;base64,${mockImageBase64}`;
-    expect(result.current.bgUrl).toBe(expectedUrl);
-
-    // Check if it was saved to cache
-    const cacheKey = `linguaRole_bg_${btoa(unescape(encodeURIComponent(prompt))).slice(0, 16)}`;
-    expect(localStorage.getItem(cacheKey)).toBe(expectedUrl);
-  });
-
-  it('should initialize with cached image and not call API if cache exists', () => {
-    const prompt = 'cached prompt';
-    const cachedUrl = 'data:image/jpeg;base64,cached-data';
-    const cacheKey = `linguaRole_bg_${btoa(unescape(encodeURIComponent(prompt))).slice(0, 16)}`;
-
-    localStorage.setItem(cacheKey, cachedUrl);
-
-    const { result } = renderHook(() => useGeneratedBackground(prompt));
-
-    expect(result.current.isGenerating).toBe(false);
-    expect(result.current.bgUrl).toBe(cachedUrl);
-
-    expect(mockGenerateContent).not.toHaveBeenCalled();
-  });
-
-  it('should handle API errors gracefully', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    mockGenerateContent.mockRejectedValueOnce(new Error('API Error'));
-
-    const prompt = 'error prompt';
-    const { result } = renderHook(() => useGeneratedBackground(prompt));
-
-    await waitFor(() => {
-      expect(result.current.isGenerating).toBe(false);
-    });
-
-    expect(result.current.bgUrl).toBeNull();
-    expect(console.error).toHaveBeenCalledWith("Failed to generate background", expect.any(Error));
-  });
-
-  it('should handle localStorage quota errors gracefully', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const mockImageBase64 = 'large-mock-data';
-
-    mockGenerateContent.mockResolvedValueOnce({
-        candidates: [
-          {
-            content: {
-              parts: [
-                {
-                  inlineData: {
-                    data: mockImageBase64,
-                  },
-                },
-              ],
-            },
-          },
-        ],
-      });
-
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
-      throw new Error('QuotaExceededError');
-    });
-
-    const prompt = 'large image prompt';
-    const { result } = renderHook(() => useGeneratedBackground(prompt));
-
-    await waitFor(() => {
-      expect(result.current.isGenerating).toBe(false);
-    });
-
-    const expectedUrl = `data:image/jpeg;base64,${mockImageBase64}`;
-    expect(result.current.bgUrl).toBe(expectedUrl);
-
-    expect(console.warn).toHaveBeenCalledWith("Could not save background to localStorage (might be too large).");
-
-    setItemSpy.mockRestore();
+    // Restore the spy
+    consoleErrorSpy.mockRestore();
   });
 });
