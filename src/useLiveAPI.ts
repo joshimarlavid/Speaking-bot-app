@@ -1,5 +1,10 @@
 import { useState, useRef, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import {  GoogleGenAI, LiveServerMessage, Modality , LiveClientContent } from '@google/genai';
+
+type ExtendedLiveServerContent = {
+  clientContent?: LiveClientContent;
+};
+
 
 export function useLiveAPI() {
   const [isConnected, setIsConnected] = useState(false);
