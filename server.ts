@@ -458,8 +458,21 @@ Excellent job completing your dialogue practice! You showed great confidence and
         .map((m: any) => `${m.role === "user" ? "Student" : "Roleplay Partner"}: ${m.text}`)
         .join("\n");
 
-      const systemPrompt = `You are an expert bilingual, empathetic language coach and diagnostic roleplay examiner.
-You will critique the conversation between the student ("${student_name || "the user"}") and their "Roleplay Partner".
+      const systemInstruction = `You are an expert bilingual, empathetic language coach and diagnostic roleplay examiner.
+Please offer a highly structured, supportive critique of the provided conversation transcript in Markdown format:
+1. **🏆 Overall Conversational Effectiveness & Scenario Status**: Rate how successfully the student communicated. Did they satisfy the character's win condition or lose condition? Celebrate their success and highlight overall flow, confidence, and fluency.
+2. **🌟 Praise & Encouragement**: Appreciate their engagement, confidence, and communicative efforts.
+3. **📚 Vocabulary & Grammar Target Achievement**:
+   - Evaluate if they successfully integrated the core vocabulary words.
+   - Assess their usage of the target grammar. Be specific with examples from their actual transcript.
+4. **🗣️ Pronunciation & Fluency Hints**: Provide 2-3 specific pronunciation, syllable stress, or linking sound tips (e.g., using IPA or simple syllable breakdown guides) on key words or expressions that they spoke, explaining how to pronounce them elegantly and naturally.
+5. **✍️ Script Feedback & Corrections Table**: Create a neat Markdown comparison table of grammatical mistakes or awkward phrasings made versus natural, native correct forms, with brief explanations:
+| Student's Phrase | Natural Correction | Explanation & Language Focus |
+| :--- | :--- | :--- |
+
+Keep the tone encouraging, inspiring, and professional.`;
+
+      const contents = `Critique the conversation between the student ("${student_name || "the user"}") and their "Roleplay Partner".
 
 Active language target topic: "${topic_title || "General conversation"}"
 Grammar Target to practice: "${grammar || "Any relevant structures"}"
@@ -469,25 +482,16 @@ Conversation transcript to analyze:
 """
 ${conversationStr}
 """
-
-Please offer a highly structured, supportive critique in Markdown format:
-1. **🏆 Overall Conversational Effectiveness & Scenario Status**: Rate how successfully the student communicated. Did they satisfy the character's win condition or lose condition? Celebrate their success and highlight overall flow, confidence, and fluency.
-2. **🌟 Praise & Encouragement**: Appreciate their engagement, confidence, and communicative efforts.
-3. **📚 Vocabulary & Grammar Target Achievement**:
-   - Evaluate if they successfully integrated the core vocabulary words: ${Array.isArray(vocabulary) ? vocabulary.join(", ") : "none"}.
-   - Assess their usage of the target grammar: "${grammar || "none"}". Be specific with examples from their actual transcript.
-4. **🗣️ Pronunciation & Fluency Hints**: Provide 2-3 specific pronunciation, syllable stress, or linking sound tips (e.g., using IPA or simple syllable breakdown guides) on key words or expressions that they spoke, explaining how to pronounce them elegantly and naturally.
-5. **✍️ Script Feedback & Corrections Table**: Create a neat Markdown comparison table of grammatical mistakes or awkward phrasings made versus natural, native correct forms, with brief explanations:
-| Student's Phrase | Natural Correction | Explanation & Language Focus |
-| :--- | :--- | :--- |
-
-Keep the tone encouraging, inspiring, and professional.`;
+`;
 
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: systemPrompt,
+          contents: contents,
+          config: {
+            systemInstruction: systemInstruction
+          }
         });
         res.status(200).json({ feedback: geminiResponse.text || "Unable to generate feedback at this time." });
       } catch (err) {
@@ -521,8 +525,7 @@ Keep the tone encouraging, inspiring, and professional.`;
         return;
       }
 
-      const systemPrompt = `You are a professional language teacher specializing in bilingual Spanish-English flashcard generation.
-Analyze the vocabulary word or phrasal verb: "${vocab}" in the context of the topic: "${topic || "General Practice"}".
+      const systemInstruction = `You are a professional language teacher specializing in bilingual Spanish-English flashcard generation.
 
 Provide a JSON response with the following keys and structure:
 {
@@ -538,12 +541,15 @@ Provide a JSON response with the following keys and structure:
 
 Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or any other characters.`;
 
+      const contents = `Analyze the vocabulary word or phrasal verb: "${vocab}" in the context of the topic: "${topic || "General Practice"}".`;
+
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: systemPrompt,
+          contents: contents,
           config: {
+            systemInstruction: systemInstruction,
             responseMimeType: "application/json"
           }
         });
