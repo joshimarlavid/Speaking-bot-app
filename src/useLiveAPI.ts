@@ -230,8 +230,30 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 }
               }
             }
-            if ((message.serverContent as ExtendedLiveServerContent)?.clientContent?.turns) {
-              for (const turn of (message.serverContent as ExtendedLiveServerContent).clientContent!.turns!) {
+            
+            if ((message as any).clientContent?.turnComplete) {
+              // Sometimes input transcription comes differently, but we'll try to catch what we can
+            }
+            
+            if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
+              // This is audio
+            }
+
+            if ((message as any).clientContent?.turnComplete) {
+              // Not reliable for text
+            }
+
+            if (message.serverContent?.turnComplete) {
+              // Turn complete
+            }
+
+            // Let's check for inputTranscription and outputTranscription as per docs
+            if (message.serverContent?.modelTurn?.parts) {
+               // already handled above
+            }
+            
+            if ((message.serverContent as any)?.clientContent?.turns) {
+              for (const turn of (message.serverContent as any).clientContent.turns) {
                 for (const part of turn.parts) {
                   if (part.text && !part.text.includes("Greeting trigger:")) {
                     setUserTranscript(prev => prev + " " + part.text);
@@ -239,6 +261,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 }
               }
             }
+
             if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
               const base64Audio = message.serverContent.modelTurn.parts[0].inlineData.data;
               if (audioContextRef.current) {
