@@ -1,0 +1,7 @@
+{
+  "name": "LinguaRole: AI Conversation Practice",
+  "description": "Real-time conversational AI partner for language learners with role-plays and randomized vocabulary focus.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
