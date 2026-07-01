@@ -209,8 +209,9 @@ function generateResilientOfflineCard(vocab: string, topic?: string) {
   const word = vocab.trim().replace(/[()]/g, "");
   const wordLower = word.toLowerCase();
   
-  if (Object.prototype.hasOwnProperty.call(OFFLINE_DICTIONARY, wordLower)) {
-    return OFFLINE_DICTIONARY[wordLower];
+  const match = Object.keys(OFFLINE_DICTIONARY).find(k => k.toLowerCase() === wordLower);
+  if (match) {
+    return OFFLINE_DICTIONARY[match];
   }
 
   // fallback templates based on part of speech guess
@@ -250,8 +251,9 @@ function generateResilientOfflineCard(vocab: string, topic?: string) {
   };
 }
 
-export async function createApp() {
+async function startServer() {
   const app = express();
+  const PORT = 3000;
 
   // Use JSON middleware for POST requests
   app.use(express.json());
@@ -331,10 +333,7 @@ export async function createApp() {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
           const geminiResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Usuario: ${user_input}\nRespuesta:`,
-            config: {
-              systemInstruction: persona_prompt,
-            }
+            contents: `${persona_prompt}\nUsuario: ${user_input}\nRespuesta:`,
           });
           text_response = geminiResponse.text || "";
         } catch (apiErr) {
@@ -457,21 +456,8 @@ Excellent job completing your dialogue practice! You showed great confidence and
         .map((m: any) => `${m.role === "user" ? "Student" : "Roleplay Partner"}: ${m.text}`)
         .join("\n");
 
-      const systemInstruction = `You are an expert bilingual, empathetic language coach and diagnostic roleplay examiner.
-Please offer a highly structured, supportive critique of the provided conversation transcript in Markdown format:
-1. **🏆 Overall Conversational Effectiveness & Scenario Status**: Rate how successfully the student communicated. Did they satisfy the character's win condition or lose condition? Celebrate their success and highlight overall flow, confidence, and fluency.
-2. **🌟 Praise & Encouragement**: Appreciate their engagement, confidence, and communicative efforts.
-3. **📚 Vocabulary & Grammar Target Achievement**:
-   - Evaluate if they successfully integrated the core vocabulary words.
-   - Assess their usage of the target grammar. Be specific with examples from their actual transcript.
-4. **🗣️ Pronunciation & Fluency Hints**: Provide 2-3 specific pronunciation, syllable stress, or linking sound tips (e.g., using IPA or simple syllable breakdown guides) on key words or expressions that they spoke, explaining how to pronounce them elegantly and naturally.
-5. **✍️ Script Feedback & Corrections Table**: Create a neat Markdown comparison table of grammatical mistakes or awkward phrasings made versus natural, native correct forms, with brief explanations:
-| Student's Phrase | Natural Correction | Explanation & Language Focus |
-| :--- | :--- | :--- |
-
-Keep the tone encouraging, inspiring, and professional.`;
-
-      const contents = `Critique the conversation between the student ("${student_name || "the user"}") and their "Roleplay Partner".
+      const systemPrompt = `You are an expert bilingual, empathetic language coach and diagnostic roleplay examiner.
+You will critique the conversation between the student ("${student_name || "the user"}") and their "Roleplay Partner".
 
 Active language target topic: "${topic_title || "General conversation"}"
 Grammar Target to practice: "${grammar || "Any relevant structures"}"
@@ -481,16 +467,25 @@ Conversation transcript to analyze:
 """
 ${conversationStr}
 """
-`;
+
+Please offer a highly structured, supportive critique in Markdown format:
+1. **🏆 Overall Conversational Effectiveness & Scenario Status**: Rate how successfully the student communicated. Did they satisfy the character's win condition or lose condition? Celebrate their success and highlight overall flow, confidence, and fluency.
+2. **🌟 Praise & Encouragement**: Appreciate their engagement, confidence, and communicative efforts.
+3. **📚 Vocabulary & Grammar Target Achievement**:
+   - Evaluate if they successfully integrated the core vocabulary words: ${Array.isArray(vocabulary) ? vocabulary.join(", ") : "none"}.
+   - Assess their usage of the target grammar: "${grammar || "none"}". Be specific with examples from their actual transcript.
+4. **🗣️ Pronunciation & Fluency Hints**: Provide 2-3 specific pronunciation, syllable stress, or linking sound tips (e.g., using IPA or simple syllable breakdown guides) on key words or expressions that they spoke, explaining how to pronounce them elegantly and naturally.
+5. **✍️ Script Feedback & Corrections Table**: Create a neat Markdown comparison table of grammatical mistakes or awkward phrasings made versus natural, native correct forms, with brief explanations:
+| Student's Phrase | Natural Correction | Explanation & Language Focus |
+| :--- | :--- | :--- |
+
+Keep the tone encouraging, inspiring, and professional.`;
 
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: contents,
-          config: {
-            systemInstruction: systemInstruction
-          }
+          contents: systemPrompt,
         });
         res.status(200).json({ feedback: geminiResponse.text || "Unable to generate feedback at this time." });
       } catch (err) {
@@ -524,7 +519,8 @@ ${conversationStr}
         return;
       }
 
-      const systemInstruction = `You are a professional language teacher specializing in bilingual Spanish-English flashcard generation.
+      const systemPrompt = `You are a professional language teacher specializing in bilingual Spanish-English flashcard generation.
+Analyze the vocabulary word or phrasal verb: "${vocab}" in the context of the topic: "${topic || "General Practice"}".
 
 Provide a JSON response with the following keys and structure:
 {
@@ -540,15 +536,12 @@ Provide a JSON response with the following keys and structure:
 
 Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or any other characters.`;
 
-      const contents = `Analyze the vocabulary word or phrasal verb: "${vocab}" in the context of the topic: "${topic || "General Practice"}".`;
-
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: contents,
+          contents: systemPrompt,
           config: {
-            systemInstruction: systemInstruction,
             responseMimeType: "application/json"
           }
         });
@@ -584,22 +577,9 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
     });
   }
 
-  return app;
-}
-
-export async function startServer(port = 3000) {
-  const app = await createApp();
-  const PORT = port;
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
 
-// Only start the server if this file is run directly (not imported as a module)
-// Using an environment variable or simply relying on importing createApp for tests is safer.
-// Since tests will import `createApp`, we shouldn't automatically start the server.
-
-// A simpler way to check if it's the main module
-if (process.argv[1] && process.argv[1].includes('server.ts')) {
-  startServer();
-}
+startServer();
