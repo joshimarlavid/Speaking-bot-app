@@ -56,7 +56,6 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     return [...conversationalDecks, ...grammarDecks];
   }, []);
 
-  // Selected state
   const [selectedDeckId, setSelectedDeckId] = useState<string>(decks[0]?.id || "t_supermarket");
   const activeDeck = decks.find(d => d.id === selectedDeckId) || decks[0];
 
