@@ -12,6 +12,7 @@ import { jsPDF } from 'jspdf';
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
 import { playClick, playStart, playReward } from './utils/audio';
+import { shuffle } from "./utils/shuffle";
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 
 type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
@@ -352,8 +353,12 @@ export default function App() {
       const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
       // Clean up multiple spaces and split
       const words = fullSentence.split(/\s+/).filter(Boolean);
-      // Randomly shuffle
-      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      // Randomly shuffle using Fisher-Yates
+      const shuffled = [...words];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
@@ -999,6 +1004,29 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
+
+  // Load feedback logs on mount
+  useEffect(() => {
+    try {
+      const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+      setFeedbackLogs(logs);
+    } catch (e) {
+      console.error("Local storage error:", e);
+    }
+  }, []);
+
+  const saveFeedbackLogs = useCallback((newLogsOrUpdater: any[] | ((prev: any[]) => any[])) => {
+    setFeedbackLogs(prev => {
+      const updatedLogs = typeof newLogsOrUpdater === 'function' ? newLogsOrUpdater(prev) : newLogsOrUpdater;
+      try {
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(updatedLogs));
+      } catch (e) {
+        console.error("Local storage error:", e);
+      }
+      return updatedLogs;
+    });
+  }, []);
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -2242,7 +2270,7 @@ export default function App() {
                                     const originalWord = currentExercise.options[currentExercise.answer];
                                     const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
                                     const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
+                                    setUnscrambleOptions(shuffle(words));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
