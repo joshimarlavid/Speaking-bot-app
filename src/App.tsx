@@ -1,3 +1,6 @@
+import { Dashboard } from "./components/Dashboard";
+import { RoleSelection } from "./components/RoleSelection";
+import { ActiveCall } from "./components/ActiveCall";
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
@@ -269,6 +272,25 @@ export default function App() {
     }));
     setBubbles(generated);
   }, []);
+
+  const [feedbackLogs, setFeedbackLogs] = useState(() => {
+    try {
+      const stored = localStorage.getItem('linguaRole_feedback');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error("Failed to parse initial feedback logs", e);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
+    } catch (e) {
+      console.error("Failed to save feedback logs", e);
+    }
+  }, [feedbackLogs]);
+
   const [showDialogue, setShowDialogue] = useState(true);
   const [studentName, setStudentName] = useState(() => {
     return localStorage.getItem('linguaRole_student') || STUDENTS[0];
@@ -295,7 +317,7 @@ export default function App() {
     return TOPICS[0];
   });
 
-  const [isPremium, setIsPremium] = useState(false);
+  const [isPremium, setIsPremium] = useState(() => localStorage.getItem('linguaRole_premium') === 'true');
   const [isBookPurchased, setIsBookPurchased] = useState(false);
   const [selectedGrammarTopic, setSelectedGrammarTopic] = useState(() => GRAMMAR_TOPICS[0]);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -709,6 +731,7 @@ export default function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [ratingAI, setRatingAI] = useState(0);
   const [ratingTopic, setRatingTopic] = useState(0);
+  const [skillFocus, setSkillFocus] = useState("Oral Performance");
   const [feedbackText, setFeedbackText] = useState("");
   const [sessionTime, setSessionTime] = useState(180);
   const [aiFeedbackReport, setAiFeedbackReport] = useState<string | null>(null);
@@ -735,7 +758,7 @@ export default function App() {
     "Aoede": "AZnzlk1XvdvUeBnXmlld",     // Dom
   };
 
-  const isSessionConnected = isConnected || elevenLabsConnected;
+  // const isConnected = isConnected || elevenLabsConnected;
   const isSessionConnecting = isConnecting || elevenLabsLoading;
 
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<'all' | 'A1' | 'A2' | 'B1_B2' | 'C1'>('all');
@@ -1010,7 +1033,7 @@ export default function App() {
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
-    if (isSessionConnected) {
+    if (isConnected) {
       interval = setInterval(() => {
         setSessionTime(prev => {
           if (prev <= 1) {
@@ -1027,7 +1050,7 @@ export default function App() {
       setSessionTime(180);
     }
     return () => clearInterval(interval);
-  }, [isSessionConnected]);
+  }, [isConnected]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -1046,6 +1069,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('linguaRole_role', selectedRole.id);
   }, [selectedRole]);
+
+
+  const handlePayment = () => {
+    // In a real app, this redirects to PayPal or opens a checkout modal.
+    window.open("https://paypal.me/YOUR_PAYPAL_LINK", "_blank");
+    setIsPremium(true);
+    localStorage.setItem('linguaRole_premium', 'true');
+  };
+
 
   const rollDice = () => {
     playClick();
@@ -1204,6 +1236,7 @@ export default function App() {
       student: mode === 'teacher' ? 'Joshimar (Teacher)' : studentName,
       role: selectedRole.name,
       topic: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
+      skillFocus,
       ratingAI,
       ratingTopic,
       comments: feedbackText,
@@ -1216,6 +1249,7 @@ export default function App() {
     setShowFeedback(false);
     setRatingAI(0);
     setRatingTopic(0);
+    setSkillFocus("Oral Performance");
     setFeedbackText("");
     setAiFeedbackReport(null);
   };
@@ -1497,7 +1531,7 @@ export default function App() {
                         type="text"
                         value={studentName}
                         onChange={(e) => setStudentName(e.target.value)}
-                        disabled={isSessionConnected || isSessionConnecting}
+                        disabled={isConnected || isSessionConnecting}
                         placeholder="Enter your name..."
                         className="w-full bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500 transition-all disabled:opacity-50 font-medium"
                       />
@@ -1517,7 +1551,7 @@ export default function App() {
                       <div className="flex bg-black/60 p-1 rounded-lg border border-zinc-800/50">
                         <button 
                           type="button"
-                          disabled={isSessionConnected || isSessionConnecting}
+                          disabled={isConnected || isSessionConnecting}
                           onClick={() => { playClick(); setElevenLabsMode(false); }}
                           className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${!elevenLabsMode ? 'bg-blue-500 text-black shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'text-blue-400/60 hover:text-blue-300'} disabled:opacity-50`}
                         >
@@ -1525,7 +1559,7 @@ export default function App() {
                         </button>
                         <button 
                           type="button"
-                          disabled={isSessionConnected || isSessionConnecting}
+                          disabled={isConnected || isSessionConnecting}
                           onClick={() => { playClick(); setElevenLabsMode(true); }}
                           className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${elevenLabsMode ? 'bg-fuchsia-500 text-white shadow-[0_0_8px_rgba(217,70,239,0.4)]' : 'text-fuchsia-400/60 hover:text-fuchsia-300'} disabled:opacity-50`}
                         >
@@ -1553,7 +1587,7 @@ export default function App() {
                             placeholder="Search names, topics, or goals..."
                             value={roleSearchQuery}
                             onChange={(e) => setRoleSearchQuery(e.target.value)}
-                            disabled={isSessionConnected || isSessionConnecting}
+                            disabled={isConnected || isSessionConnecting}
                             className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all placeholder-blue-500/25 disabled:opacity-50 font-medium"
                           />
                           {roleSearchQuery && (
@@ -1581,7 +1615,7 @@ export default function App() {
                               <button
                                 key={lvl}
                                 type="button"
-                                disabled={isSessionConnected || isSessionConnecting}
+                                disabled={isConnected || isSessionConnecting}
                                 onClick={() => { playClick(); setSelectedLevelFilter(lvl); }}
                                 className={`flex-1 py-1.5 px-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap ${
                                   selectedLevelFilter === lvl 
@@ -1623,7 +1657,7 @@ export default function App() {
                               <button
                                 key={role.id}
                                 type="button"
-                                disabled={isSessionConnected || isSessionConnecting}
+                                disabled={isConnected || isSessionConnecting}
                                 onClick={() => {
                                   playClick();
                                   setSelectedRole(role);
@@ -1714,7 +1748,7 @@ export default function App() {
                         <h3 className="text-blue-200 font-bold tracking-widest uppercase mb-2">Teacher Mode Locked</h3>
                         <p className="text-blue-300/90 text-base mb-4">Upgrade to Premium to unlock Teacher Mode and practice specific grammar exercises.</p>
                         <button 
-                          onClick={() => setIsPremium(true)}
+                          onClick={handlePayment}
                           className="bg-amber-500 hover:bg-amber-400 text-black px-6 py-2 rounded-full font-bold tracking-widest uppercase text-base transition-all"
                         >
                           Upgrade Now (Demo)
@@ -2495,14 +2529,14 @@ export default function App() {
               </GothicSkullFlowerFrame>
             ) : (
               <GothicSkullFlowerFrame 
-                title={isSessionConnected ? "Active Conversation" : "Learning Focus"} 
+                title={isConnected ? "Active Conversation" : "Learning Focus"}
                 icon={<Briefcase size={20} className={activeTheme.activeIconColor} />}
                 theme={activeTheme}
               >
                 <div className="flex items-center justify-end mb-6">
                   <button 
                     onClick={rollDice}
-                    disabled={isSessionConnected || isSessionConnecting}
+                    disabled={isConnected || isSessionConnecting}
                     className="flex items-center gap-2 px-4 py-2 bg-zinc-900/80 hover:bg-zinc-800 text-blue-100 border border-zinc-800/50 rounded-full text-base font-bold tracking-wider uppercase transition-colors disabled:opacity-50"
                   >
                     <Dices size={16} />
@@ -2516,7 +2550,7 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 className="flex-1 bg-zinc-900/90 rounded-2xl relative border-[4px] border-double border-slate-400/30 p-6 border border-zinc-800/50 max-h-[500px] overflow-y-auto custom-scrollbar"
               >
-                {mode === 'beginner' && isSessionConnected && showDialogue ? (
+                {mode === 'beginner' && isConnected && showDialogue ? (
                   <div className="flex flex-col">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-base font-bold text-blue-200 uppercase tracking-widest">Example Conversation (Read Aloud)</h3>
@@ -2540,7 +2574,7 @@ export default function App() {
                   </div>
                 ) : (
                   <>
-                    {mode === 'beginner' && isSessionConnected && !showDialogue && (
+                    {mode === 'beginner' && isConnected && !showDialogue && (
                        <div className="mb-6 flex justify-end border-b border-zinc-800/50 pb-4">
                           <button onClick={() => setShowDialogue(true)} className="flex items-center gap-2 px-4 py-2 bg-blue-950/30 border border-blue-900/50 rounded-full text-base text-blue-200 font-bold uppercase tracking-widest hover:bg-blue-900/50 transition-colors">
                             <Eye size={16} /> Show Example Dialogue
@@ -2596,7 +2630,7 @@ export default function App() {
               </motion.div>
 
               <div className="mt-8 pt-6 border-t border-blue-900/50">
-                {!isSessionConnected ? (
+                {!isConnected ? (
                   <>
                     {mode === 'student' && ROLES.findIndex(r => r.id === selectedRole.id) >= 5 && !isPremium ? (
                       <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-6 text-center">
@@ -2605,13 +2639,13 @@ export default function App() {
                         <p className="text-blue-300/90 text-base mb-4">You have reached the limit of 5 free roles. Pay for this role or buy the package to unlock all roles.</p>
                         <div className="flex flex-col sm:flex-row gap-3 justify-center">
                           <button 
-                            onClick={() => setIsPremium(true)}
+                            onClick={handlePayment}
                             className="bg-zinc-800 hover:bg-zinc-700 text-blue-200 border border-blue-500/30 px-6 py-3 rounded-xl font-bold tracking-widest uppercase text-base transition-all"
                           >
                             Unlock Role ($0.99)
                           </button>
                           <button 
-                            onClick={() => setIsPremium(true)}
+                            onClick={handlePayment}
                             className="bg-amber-500 hover:bg-amber-400 text-black px-6 py-3 rounded-xl font-bold tracking-widest uppercase text-base transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)]"
                           >
                             Buy Package ($4.99)
@@ -2894,6 +2928,20 @@ export default function App() {
                     ⭐ Rate this Practice
                   </h3>
                   
+
+                  <div className="mb-4">
+                    <label className="block text-[11px] tracking-wider uppercase font-bold text-zinc-400 mb-1.5">Skill Focus</label>
+                    <select
+                      value={skillFocus}
+                      onChange={(e) => setSkillFocus(e.target.value)}
+                      className="w-full bg-zinc-900/60 border border-zinc-800/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 appearance-none text-xs"
+                    >
+                      <option value="Oral Performance">Oral Performance</option>
+                      <option value="Vocabulary">Vocabulary</option>
+                      <option value="Fluency/Pronunciation">Fluency/Pronunciation</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-[11px] tracking-wider uppercase font-bold text-zinc-400 mb-1.5">AI Performance & Naturalness</label>
                     <div className="flex gap-1.5">
@@ -2944,6 +2992,7 @@ export default function App() {
                         student: mode === 'teacher' ? 'Joshimar (Teacher)' : studentName,
                         role: selectedRole.name,
                         topic: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
+                        skillFocus,
                         ratingAI: ratingAI || 5,
                         ratingTopic: ratingTopic || 5,
                         comments: feedbackText || "Self-study session completed.",
@@ -2955,6 +3004,7 @@ export default function App() {
                       setShowFeedback(false);
                       setRatingAI(0);
                       setRatingTopic(0);
+                      setSkillFocus("Oral Performance");
                       setFeedbackText("");
                       setAiFeedbackReport(null);
                     }}
