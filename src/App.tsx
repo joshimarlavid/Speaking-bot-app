@@ -15,7 +15,6 @@ import { jsPDF } from 'jspdf';
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
 import { playClick, playStart, playReward } from './utils/audio';
-import { shuffle } from "./utils/shuffle";
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 
 type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
@@ -356,12 +355,8 @@ export default function App() {
       const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
       // Clean up multiple spaces and split
       const words = fullSentence.split(/\s+/).filter(Boolean);
-      // Randomly shuffle using Fisher-Yates
-      const shuffled = [...words];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
+      // Randomly shuffle
+      const shuffled = [...words].sort(() => Math.random() - 0.5);
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
@@ -423,14 +418,16 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => [...prev, {
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
           ratingAI: 5,
           ratingTopic: 5
-        }].slice(-100));
+        });
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -453,14 +450,16 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => [...prev, {
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
           ratingAI: 5,
           ratingTopic: 5
-        }].slice(-100));
+        });
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -490,14 +489,16 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => [...prev, {
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
           ratingAI: 5,
           ratingTopic: 5
-        }].slice(-100));
+        });
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -518,7 +519,12 @@ export default function App() {
       
       const runes = (exercisesCompleted * 150) + 1200;
       const lvl = Math.floor(runes / 1000);
-      const logs: any[] = feedbackLogs;
+      let logs: any[] = [];
+      try {
+        logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+      } catch (e) {
+        console.error("Local storage error:", e);
+      }
 
       // Add elegant border representing the Gothic chamber frame
       doc.setDrawColor(120, 20, 20); // Deep Gothic Crimson
@@ -1007,29 +1013,6 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
-  const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
-
-  // Load feedback logs on mount
-  useEffect(() => {
-    try {
-      const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-      setFeedbackLogs(logs);
-    } catch (e) {
-      console.error("Local storage error:", e);
-    }
-  }, []);
-
-  const saveFeedbackLogs = useCallback((newLogsOrUpdater: any[] | ((prev: any[]) => any[])) => {
-    setFeedbackLogs(prev => {
-      const updatedLogs = typeof newLogsOrUpdater === 'function' ? newLogsOrUpdater(prev) : newLogsOrUpdater;
-      try {
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(updatedLogs));
-      } catch (e) {
-        console.error("Local storage error:", e);
-      }
-      return updatedLogs;
-    });
-  }, []);
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -1260,7 +1243,8 @@ export default function App() {
       aiReport: aiFeedbackReport
     };
     
-    setFeedbackLogs(prev => [...prev, feedback].slice(-100));
+    const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
     
     setShowFeedback(false);
     setRatingAI(0);
@@ -2282,7 +2266,7 @@ export default function App() {
                                     const originalWord = currentExercise.options[currentExercise.answer];
                                     const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
                                     const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions(shuffle(words));
+                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
@@ -2414,7 +2398,7 @@ export default function App() {
                       </div>
                       <div className={`p-4 rounded-xl border flex items-center gap-3 transition-opacity ${(() => {
                         try {
-                          return feedbackLogs.length > 0;
+                          return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]').length > 0;
                         } catch {
                           return false;
                         }
@@ -2437,7 +2421,7 @@ export default function App() {
                     <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
                       {(() => {
                         try {
-                          const logs = feedbackLogs;
+                          const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
                           if (logs.length === 0) {
                             return (
                               <div className="bg-red-950/10 border border-red-950/30 rounded-xl p-6 text-center text-zinc-400">
@@ -3014,7 +2998,8 @@ export default function App() {
                         comments: feedbackText || "Self-study session completed.",
                         aiReport: aiFeedbackReport
                       };
-                      setFeedbackLogs(prev => [...prev, feedback].slice(-100));
+                      const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+                      localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
                       
                       setShowFeedback(false);
                       setRatingAI(0);
