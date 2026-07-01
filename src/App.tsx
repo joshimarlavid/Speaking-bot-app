@@ -270,6 +270,25 @@ export default function App() {
     }));
     setBubbles(generated);
   }, []);
+
+  const [feedbackLogs, setFeedbackLogs] = useState(() => {
+    try {
+      const stored = localStorage.getItem('linguaRole_feedback');
+      return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+      console.error("Failed to parse initial feedback logs", e);
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
+    } catch (e) {
+      console.error("Failed to save feedback logs", e);
+    }
+  }, [feedbackLogs]);
+
   const [showDialogue, setShowDialogue] = useState(true);
   const [studentName, setStudentName] = useState(() => {
     return localStorage.getItem('linguaRole_student') || STUDENTS[0];
@@ -401,14 +420,14 @@ export default function App() {
       playReward();
 
       try {
-        saveFeedbackLogs(prev => [...prev, {
+        setFeedbackLogs(prev => [...prev, {
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
           ratingAI: 5,
           ratingTopic: 5
-        }]);
+        }].slice(-100));
       } catch (e) {
         console.error(e);
       }
@@ -431,14 +450,14 @@ export default function App() {
       playReward();
 
       try {
-        saveFeedbackLogs(prev => [...prev, {
+        setFeedbackLogs(prev => [...prev, {
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
           ratingAI: 5,
           ratingTopic: 5
-        }]);
+        }].slice(-100));
       } catch (e) {
         console.error(e);
       }
@@ -468,14 +487,14 @@ export default function App() {
       playReward();
 
       try {
-        saveFeedbackLogs(prev => [...prev, {
+        setFeedbackLogs(prev => [...prev, {
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
           comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
           ratingAI: 5,
           ratingTopic: 5
-        }]);
+        }].slice(-100));
       } catch (e) {
         console.error(e);
       }
@@ -496,7 +515,7 @@ export default function App() {
       
       const runes = (exercisesCompleted * 150) + 1200;
       const lvl = Math.floor(runes / 1000);
-      let logs = feedbackLogs;
+      const logs: any[] = feedbackLogs;
 
       // Add elegant border representing the Gothic chamber frame
       doc.setDrawColor(120, 20, 20); // Deep Gothic Crimson
@@ -703,6 +722,7 @@ export default function App() {
   const [showFeedback, setShowFeedback] = useState(false);
   const [ratingAI, setRatingAI] = useState(0);
   const [ratingTopic, setRatingTopic] = useState(0);
+  const [skillFocus, setSkillFocus] = useState("Oral Performance");
   const [feedbackText, setFeedbackText] = useState("");
   const [sessionTime, setSessionTime] = useState(180);
   const [aiFeedbackReport, setAiFeedbackReport] = useState<string | null>(null);
@@ -1221,17 +1241,19 @@ export default function App() {
       student: mode === 'teacher' ? 'Joshimar (Teacher)' : studentName,
       role: selectedRole.name,
       topic: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
+      skillFocus,
       ratingAI,
       ratingTopic,
       comments: feedbackText,
       aiReport: aiFeedbackReport
     };
     
-    saveFeedbackLogs(prev => [...prev, feedback]);
+    setFeedbackLogs(prev => [...prev, feedback].slice(-100));
     
     setShowFeedback(false);
     setRatingAI(0);
     setRatingTopic(0);
+    setSkillFocus("Oral Performance");
     setFeedbackText("");
     setAiFeedbackReport(null);
   };
@@ -2378,7 +2400,13 @@ export default function App() {
                           <p className="text-zinc-400 text-xs mt-1">Earn 1,500 eloquence runes.</p>
                         </div>
                       </div>
-                      <div className={`p-4 rounded-xl border flex items-center gap-3 transition-opacity ${feedbackLogs.length > 0 ? 'bg-zinc-900/60 border-red-900/30 opacity-100' : 'bg-zinc-950/20 border-zinc-900/50 opacity-40'}`}>
+                      <div className={`p-4 rounded-xl border flex items-center gap-3 transition-opacity ${(() => {
+                        try {
+                          return feedbackLogs.length > 0;
+                        } catch {
+                          return false;
+                        }
+                      })() ? 'bg-zinc-900/60 border-red-900/30 opacity-100' : 'bg-zinc-950/20 border-zinc-900/50 opacity-40'}`}>
                         <span className="text-2xl">🕯️</span>
                         <div>
                           <h4 className="text-white font-bold text-sm">Chamber Adept</h4>
@@ -2904,6 +2932,20 @@ export default function App() {
                     ⭐ Rate this Practice
                   </h3>
                   
+
+                  <div className="mb-4">
+                    <label className="block text-[11px] tracking-wider uppercase font-bold text-zinc-400 mb-1.5">Skill Focus</label>
+                    <select
+                      value={skillFocus}
+                      onChange={(e) => setSkillFocus(e.target.value)}
+                      className="w-full bg-zinc-900/60 border border-zinc-800/50 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-amber-500/50 appearance-none text-xs"
+                    >
+                      <option value="Oral Performance">Oral Performance</option>
+                      <option value="Vocabulary">Vocabulary</option>
+                      <option value="Fluency/Pronunciation">Fluency/Pronunciation</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-[11px] tracking-wider uppercase font-bold text-zinc-400 mb-1.5">AI Performance & Naturalness</label>
                     <div className="flex gap-1.5">
@@ -2954,16 +2996,18 @@ export default function App() {
                         student: mode === 'teacher' ? 'Joshimar (Teacher)' : studentName,
                         role: selectedRole.name,
                         topic: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
+                        skillFocus,
                         ratingAI: ratingAI || 5,
                         ratingTopic: ratingTopic || 5,
                         comments: feedbackText || "Self-study session completed.",
                         aiReport: aiFeedbackReport
                       };
-                      saveFeedbackLogs(prev => [...prev, feedback]);
+                      setFeedbackLogs(prev => [...prev, feedback].slice(-100));
                       
                       setShowFeedback(false);
                       setRatingAI(0);
                       setRatingTopic(0);
+                      setSkillFocus("Oral Performance");
                       setFeedbackText("");
                       setAiFeedbackReport(null);
                     }}
