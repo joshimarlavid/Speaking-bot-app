@@ -56,6 +56,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     return [...conversationalDecks, ...grammarDecks];
   }, []);
 
+  // Selected state
   const [selectedDeckId, setSelectedDeckId] = useState<string>(decks[0]?.id || "t_supermarket");
   const activeDeck = decks.find(d => d.id === selectedDeckId) || decks[0];
 
@@ -64,7 +65,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   const currentWord = activeDeck.vocabulary[currentIndex] || "";
 
   // Card interaction states
-  const [isRevealed, setIsRevealed] = useState(false);
+  const [isFlipped, setIsFlipped] = useState(false);
   const [isQuizMode, setIsQuizMode] = useState(false);
   const [quizAnswer, setQuizAnswer] = useState("");
   const [quizSubmitted, setQuizSubmitted] = useState(false);
@@ -169,7 +170,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
         }
       }));
     } catch (e) {
-
+      console.error("Failed to load flashcard meta description:", e);
       // set resilient safe feedback values
       setEnrichmentData(prev => ({
         ...prev,
@@ -192,7 +193,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
 
   // Sync API details when word changes
   useEffect(() => {
-    setIsRevealed(false);
+    setIsFlipped(false);
     setQuizSubmitted(false);
     setQuizAnswer("");
     if (currentWord) {
@@ -212,7 +213,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     playClick();
     setSelectedDeckId(deckId);
     setCurrentIndex(0);
-    setIsRevealed(false);
+    setIsFlipped(false);
     setIsQuizMode(false);
     setQuizSubmitted(false);
     setQuizAnswer("");
@@ -239,7 +240,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   useEffect(() => {
     if (isAutoPlaying) {
       autoPlayTimer.current = setInterval(() => {
-        setIsRevealed(f => {
+        setIsFlipped(f => {
           if (!f) {
             // Pronounce word when flipping to the back
             if (currentWord) {
@@ -409,14 +410,17 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
         <div className="flex flex-col items-center gap-6 text-center">
 
           {/* Interactive Card Stage */}
-          <div className="relative w-full max-w-[420px] h-[400px]">
-            <div className="relative w-full h-full select-none">
+          <div className="relative w-full max-w-[420px] h-[340px] [perspective:1000px]">
+            <div
+              className={`relative w-full h-full transition-transform duration-500 [transform-style:preserve-3d] select-none ${
+                isFlipped ? '[transform:rotateY(180deg)]' : ''
+              }`}
+            >
               
               {/* CARD FRONT SIDE */}
-              {!isRevealed && (
               <div 
-                onClick={() => { if (!isQuizMode && !isLoadingDetails) { playClick(); setIsRevealed(true); } }}
-                className="absolute inset-0 w-full h-full glass-panel bg-gradient-to-br from-zinc-950 via-zinc-900/90 to-indigo-950/20 p-6 sm:p-8 rounded-3xl border-3 border-zinc-800/80 flex flex-col items-center justify-between cursor-pointer hover:border-indigo-500/40 transition-colors shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
+                onClick={() => { if (!isQuizMode && !isLoadingDetails) { playClick(); setIsFlipped(true); } }}
+                className="absolute inset-0 w-full h-full [backface-visibility:hidden] glass-panel bg-gradient-to-br from-zinc-950 via-zinc-900/90 to-indigo-950/20 p-6 sm:p-8 rounded-3xl border-3 border-zinc-800/80 flex flex-col items-center justify-between cursor-pointer hover:border-indigo-500/40 transition-colors shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
               >
                 {/* Got It checkmark label */}
                 <div className="w-full flex items-center justify-between relative">
@@ -460,13 +464,6 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
                       </div>
                     ) : (
                       <>
-                        <div className="w-full h-32 mb-4 rounded-xl overflow-hidden border border-zinc-800 relative bg-zinc-900 flex items-center justify-center">
-                          <img
-                            src={`https://picsum.photos/seed/${currentWord}/400/200`}
-                            alt={currentWord}
-                            className="absolute inset-0 w-full h-full object-cover opacity-80 mix-blend-luminosity hover:mix-blend-normal transition-all duration-500"
-                          />
-                        </div>
                         <h2 className="text-2xl sm:text-3.5xl font-extrabold text-white tracking-wide border-b border-zinc-800/40 pb-4 leading-tight break-all">
                           {currentWord}
                         </h2>
@@ -507,19 +504,16 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
 
 
 
-              )}
-
               {/* CARD BACK SIDE */}
-              {isRevealed && (
               <div 
-                className="absolute inset-0 w-full h-full glass-panel bg-gradient-to-br from-zinc-950 via-zinc-900 to-indigo-900/30 p-5 sm:p-7 rounded-3xl border-3 border-indigo-950 flex flex-col justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6)] text-left overflow-y-auto custom-scrollbar"
+                className="absolute inset-0 w-full h-full [backface-visibility:hidden] [transform:rotateY(180deg)] glass-panel bg-gradient-to-br from-zinc-950 via-zinc-900 to-indigo-900/30 p-5 sm:p-7 rounded-3xl border-3 border-indigo-950 flex flex-col justify-between shadow-[0_10px_30px_rgba(0,0,0,0.6)] text-left overflow-y-auto custom-scrollbar"
               >
                 {/* Header status */}
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-black font-mono text-indigo-400 uppercase tracking-widest">Meaning & Usage</span>
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setIsRevealed(false); }}
+                    onClick={(e) => { e.stopPropagation(); setIsFlipped(false); }}
                     className="text-xs font-black text-indigo-400 bg-indigo-950 border border-indigo-900/40 px-2 py-1 rounded-lg uppercase tracking-wider hover:bg-indigo-900 transition-colors"
                   >
                     ⬅ Rotate Back
@@ -601,7 +595,6 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
 
               </div>
 
-              )}
             </div>
           </div>
 
@@ -751,11 +744,11 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   // Mark status helper functions
   function markToPractice() {
     markMastery(currentWord, false);
-    setIsRevealed(false);
+    setIsFlipped(false);
   }
 
   function markAsGotIt() {
     markMastery(currentWord, true);
-    setIsRevealed(false);
+    setIsFlipped(false);
   }
 }
