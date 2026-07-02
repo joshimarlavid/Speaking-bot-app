@@ -2,6 +2,7 @@ import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { createProxyMiddleware } from "http-proxy-middleware";
 
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
@@ -258,6 +259,33 @@ async function startServer() {
   // Use JSON middleware for POST requests
   app.use(express.json());
 
+  // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
+  app.use('/api/gemini', createProxyMiddleware({
+    target: 'https://generativelanguage.googleapis.com',
+    changeOrigin: true,
+    ws: true,
+    pathRewrite: {
+      '^/api/gemini': '', // remove base path
+    },
+    onProxyReq: (proxyReq: any, req: any, res: any) => {
+      if (process.env.GEMINI_API_KEY) {
+        if (!proxyReq.path.includes('key=')) {
+          const sep = proxyReq.path.includes('?') ? '&' : '?';
+          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
+        }
+      }
+    },
+    onProxyReqWs: (proxyReq: any, req: any, socket: any, options: any, head: any) => {
+      if (process.env.GEMINI_API_KEY) {
+        if (!proxyReq.path.includes('key=')) {
+          const sep = proxyReq.path.includes('?') ? '&' : '?';
+          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
+        }
+      }
+    }
+  } as any));
+
+
   // Helper to generate offline simulated dialogue responses when API key is missing/invalid
   function getOfflineRoleplayResponse(userInput: string, personaPrompt: string): string {
     const input = userInput.toLowerCase();
@@ -312,6 +340,96 @@ async function startServer() {
   }
 
   // API route for Chat Roleplay with ElevenLabs Streaming
+
+  // API route for generating grammar exercise
+  app.post("/api/generate-exercise", async (req: express.Request, res: express.Response) => {
+    try {
+      const { randomTopic } = req.body;
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey || geminiKey.trim().length < 10) {
+        res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      const prompt = `Create a new English grammar exercise for the topic: ${randomTopic.title}.
+      Grammar: ${randomTopic.grammar}.
+      Vocabulary: ${randomTopic.vocabulary.join(', ')}.
+      Return ONLY a JSON object (no markdown formatting, no code blocks) with the following structure:
+      {
+        "question": "string",
+        "options": ["string", "string", "string", "string"],
+        "answer": number (0-3),
+        "explanation": "string (include a brief example sentence demonstrating the concept)",
+        "pronunciation": "string"
+      }
+      The question should be a fill-in-the-blank style sentence using '____'.
+      Ensure the vocabulary words are used appropriately.
+      Do not wrap the response in \`\`\`json or any other formatting.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const text = response.text || "{}";
+      const cleaned = text.startsWith("```json") ? text.replace(/^[^\{]*/, "").replace(/[^\}]*$/, "") : text;
+
+      try {
+        const parsed = JSON.parse(cleaned);
+        res.status(200).json(parsed);
+      } catch (e) {
+        console.error("Failed to parse JSON response:", text);
+        res.status(500).json({ error: "Failed to generate exercise" });
+      }
+    } catch (e) {
+      console.error("Error generating exercise:", e);
+      res.status(500).json({ error: "Failed to generate exercise" });
+    }
+  });
+
+  // API route for generating background image
+  app.post("/api/generate-background", async (req: express.Request, res: express.Response) => {
+    try {
+      const { prompt } = req.body;
+      const geminiKey = process.env.GEMINI_API_KEY;
+      if (!geminiKey || geminiKey.trim().length < 10) {
+        res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
+        return;
+      }
+
+      const ai = new GoogleGenAI({ apiKey: geminiKey });
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: prompt,
+        config: {
+          imageConfig: {
+            aspectRatio: "16:9",
+            imageSize: "1K"
+          }
+        }
+      });
+
+      let url = null;
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          url = `data:image/jpeg;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+
+      res.status(200).json({ url });
+    } catch (e) {
+      console.error("Failed to generate background:", e);
+      res.status(500).json({ error: "Failed to generate background" });
+    }
+  });
+
   app.post("/api/chat-roleplay", async (req: express.Request, res: express.Response) => {
     try {
       const { user_input, persona_prompt, voice_id } = req.body;

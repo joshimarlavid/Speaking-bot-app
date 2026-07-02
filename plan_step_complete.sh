@@ -1,1 +1,0 @@
-echo "Plan step completed."
