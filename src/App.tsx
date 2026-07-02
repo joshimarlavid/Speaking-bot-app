@@ -361,7 +361,7 @@ export default function App() {
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
     } catch (e) {
-      console.error("Failed to prepare unscramble options", e);
+
     }
   }, [currentExercise]);
 
@@ -429,7 +429,7 @@ export default function App() {
         });
         localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
-        console.error(e);
+
       }
     } else {
       setIncorrectAttempts(prev => ({ ...prev, [idx]: true }));
@@ -461,7 +461,7 @@ export default function App() {
         });
         localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
-        console.error(e);
+
       }
     } else {
       setSpellError(true);
@@ -500,7 +500,7 @@ export default function App() {
         });
         localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
-        console.error(e);
+
       }
     } else {
       setSpellError(true);
@@ -523,7 +523,7 @@ export default function App() {
       try {
         logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
       } catch (e) {
-        console.error("Local storage error:", e);
+
       }
 
       // Add elegant border representing the Gothic chamber frame
@@ -724,7 +724,7 @@ export default function App() {
 
       doc.save(`Gothic_Progress_Ledger_${today.replace(/[\s,]+/g, "_")}.pdf`);
     } catch (e) {
-      console.error("PDF generator error:", e);
+
     }
   }, [exercisesCompleted]);
 
@@ -886,7 +886,7 @@ export default function App() {
 
       setElevenMessages(prev => [...prev, { role: 'model', text: finalMsg }]);
     } catch (e: any) {
-      console.error(e);
+
       setElevenWarning("Failed to generate voice response. Synthetic speech fallback selected.");
     } finally {
       setElevenLabsLoading(false);
@@ -913,7 +913,7 @@ export default function App() {
       };
 
       recognition.onerror = (e: any) => {
-        console.error("Speech recognition error:", e);
+
         setIsRecording(false);
       };
 
@@ -931,7 +931,7 @@ export default function App() {
       recognitionRef.current = recognition;
       recognition.start();
     } catch (e) {
-      console.error(e);
+
       setIsRecording(false);
     }
   };
@@ -972,7 +972,7 @@ export default function App() {
       
       setElevenMessages(prev => [...prev, { role: 'model', text: `\n\n### 🎓 BILINGUAL DIAGNOSTIC REPORT\n\n${feedbackReport}` }]);
     } catch (e: any) {
-      console.error(e);
+
       setElevenWarning("Failed to fetch diagnostics report. Standard fallback active.");
     } finally {
       setElevenLabsLoading(false);
@@ -1137,7 +1137,7 @@ export default function App() {
 
         setElevenMessages([{ role: 'model', text: finalMsg }]);
       } catch (e: any) {
-        console.error(e);
+
         setElevenWarning("Failed to initialize modern neural roleplay. Standard speech fallback active.");
       } finally {
         setElevenLabsLoading(false);
@@ -1178,7 +1178,7 @@ export default function App() {
       const data = await response.json();
       setAiFeedbackReport(data.feedback || "Unable to compile diagnostics report.");
     } catch (e: any) {
-      console.error("AI feedback generation error:", e);
+
       setAiFeedbackReport("Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.");
     } finally {
       setIsGeneratingFeedback(false);

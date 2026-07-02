@@ -121,7 +121,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                   text: initMessage
                 });
               } catch (e) {
-                console.error("Failed to send initial greeting trigger:", e);
+
               }
             });
 
@@ -174,7 +174,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                       }
                     });
                   } catch (err) {
-                    console.error("Error sending realtime audio direct:", err);
+
                   }
                 } else {
                   sessionPromise.then((session) => {
@@ -186,7 +186,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                         }
                       });
                     } catch (err) {
-                      console.error("Error sending realtime audio via promise:", err);
+
                     }
                   });
                 }
@@ -201,7 +201,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                     });
                     setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
                   } catch (e) {
-                    console.error("Failed to send feedback prompt", e);
+
                   }
                 });
               }, 3 * 60 * 1000); // 3 minutes
@@ -319,13 +319,13 @@ Please format your feedback EXACTLY using the following Markdown structure:
 
                 nextPlayTimeRef.current += audioBuffer.duration;
               } catch (e) {
-                console.error("Error playing audio chunk", e);
+
               }
             }
             }
           },
           onerror: (err) => {
-            console.error("Live API Error:", err);
+
             setError("Connection error occurred.");
             disconnect();
           },
@@ -338,7 +338,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
       sessionRef.current = await sessionPromise;
       
     } catch (err: any) {
-      console.error("Failed to connect:", err);
+
       setError(err.message || "Failed to connect to Live API");
       setIsConnecting(false);
     }
@@ -395,7 +395,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
         });
         setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
       } catch (e) {
-        console.error("Failed to request feedback", e);
+
       }
     }
   }, []);
@@ -408,7 +408,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
         });
         setUserTranscript(prev => prev + " " + text);
       } catch (e) {
-        console.error("Failed to send text message", e);
+
       }
     }
   }, []);
