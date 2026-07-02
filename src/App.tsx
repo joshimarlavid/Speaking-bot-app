@@ -346,36 +346,14 @@ export default function App() {
   const generateNewExercise = useCallback(async () => {
     setIsGeneratingExercise(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
       const randomTopic = GRAMMAR_TOPICS[Math.floor(Math.random() * GRAMMAR_TOPICS.length)];
-      
-      const prompt = `Create a new English grammar exercise for the topic: ${randomTopic.title}.
-      Grammar: ${randomTopic.grammar}.
-      Vocabulary: ${randomTopic.vocabulary.join(', ')}.
-      Return ONLY a JSON object (no markdown formatting, no code blocks) with the following structure:
-      {
-        "question": "string",
-        "options": ["string", "string", "string", "string"],
-        "answer": number (0-3),
-        "explanation": "string (include a brief example sentence demonstrating the concept)",
-        "pronunciation": "string"
-      }`;
-
-      const result = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        },
+      const response = await fetch('/api/generate-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ randomTopic })
       });
-
-      let text = result.text;
-      if (!text) throw new Error("No text returned from Gemini");
-      
-      // Clean potential markdown code blocks
-      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      const exercise = JSON.parse(text);
+      if (!response.ok) throw new Error("Failed to generate exercise");
+      const exercise = await response.json();
       setCurrentExercise({ ...exercise, id: Date.now(), topic: randomTopic.title });
     } catch (error) {
       console.warn("Failed to dynamically generate exercise via Gemini API, falling back to a preloaded study card:", error);

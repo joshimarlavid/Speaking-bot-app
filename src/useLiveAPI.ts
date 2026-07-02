@@ -29,7 +29,12 @@ export function useLiveAPI() {
     setAiTranscript("");
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+            const ai = new GoogleGenAI({
+        apiKey: 'proxy', // Dummy key to pass validation; actual key is appended by proxy
+        httpOptions: {
+          baseUrl: window.location.protocol + '//' + window.location.host + '/api/gemini'
+        }
+      });
       
       let challengeInstruction = "";
       if (challenge) {
