@@ -170,7 +170,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
         }
       }));
     } catch (e) {
-      console.error("Failed to load flashcard meta description:", e);
+
       // set resilient safe feedback values
       setEnrichmentData(prev => ({
         ...prev,
