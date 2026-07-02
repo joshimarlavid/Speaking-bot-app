@@ -15,6 +15,7 @@ export function useLiveAPI() {
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
   const connect = useCallback(async (
     studentName: string,
@@ -113,17 +114,19 @@ Please format your feedback EXACTLY using the following Markdown structure:
             // Send initial trigger so AI starts the conversation
             sessionPromise.then((session) => {
               try {
+
                 let initMessage = "";
                 if (mode === "teacher") {
-                  initMessage = `Greeting trigger: Hi ${studentName || "there"}! Please introduce the topic "${topic?.title || "English grammar"}" and ask me a short diagnostic question to start our practice.`;
+                  initMessage = `Greeting trigger: Hi ${studentName || "there"}! Please introduce the topic "${topic?.title || "English grammar"}" and ask me a short diagnostic question to start our practice. Important: Speak aloud your response immediately.`;
                 } else {
-                  initMessage = `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. Greet me warmly as the student named ${studentName} inside your character's persona and context. Introduce yourself very briefly in exactly 1-2 short sentences to start our conversation!`;
+                  initMessage = `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. Greet me warmly as the student named ${studentName} inside your character's persona and context. Introduce yourself very briefly in exactly 1-2 short sentences to start our conversation! Important: Speak aloud your response immediately.`;
                 }
+
                 session.sendRealtimeInput({
                   text: initMessage
                 });
               } catch (e) {
-                console.error("Failed to send initial greeting trigger:", e);
+
               }
             });
 
@@ -176,7 +179,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                       }
                     });
                   } catch (err) {
-                    console.error("Error sending realtime audio direct:", err);
+
                   }
                 } else {
                   sessionPromise.then((session) => {
@@ -188,7 +191,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                         }
                       });
                     } catch (err) {
-                      console.error("Error sending realtime audio via promise:", err);
+
                     }
                   });
                 }
@@ -203,7 +206,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                     });
                     setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
                   } catch (e) {
-                    console.error("Failed to send feedback prompt", e);
+
                   }
                 });
               }, 3 * 60 * 1000); // 3 minutes
@@ -215,10 +218,20 @@ Please format your feedback EXACTLY using the following Markdown structure:
             }
           },
           onmessage: (message: LiveServerMessage) => {
+
             if (message.serverContent?.interrupted) {
               // Clear audio queue if interrupted
               if (audioContextRef.current) {
                 nextPlayTimeRef.current = audioContextRef.current.currentTime;
+                // Stop any currently playing audio nodes
+                activeSourcesRef.current.forEach(source => {
+                  try {
+                    source.stop();
+                  } catch (e) {
+                    // Ignore errors if already stopped
+                  }
+                });
+                activeSourcesRef.current = [];
               }
             }
 
@@ -291,6 +304,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
                 audioBuffer.getChannelData(0).set(float32);
                 
+
                 const source = audioContext.createBufferSource();
                 source.buffer = audioBuffer;
                 source.connect(audioContext.destination);
@@ -300,16 +314,23 @@ Please format your feedback EXACTLY using the following Markdown structure:
                   nextPlayTimeRef.current = currentTime;
                 }
                 
+                // Track source
+                activeSourcesRef.current.push(source);
+                source.onended = () => {
+                  activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
+                };
+
                 source.start(nextPlayTimeRef.current);
+
                 nextPlayTimeRef.current += audioBuffer.duration;
               } catch (e) {
-                console.error("Error playing audio chunk", e);
+
               }
             }
             }
           },
           onerror: (err) => {
-            console.error("Live API Error:", err);
+
             setError("Connection error occurred.");
             disconnect();
           },
@@ -322,7 +343,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
       sessionRef.current = await sessionPromise;
       
     } catch (err: any) {
-      console.error("Failed to connect:", err);
+
       setError(err.message || "Failed to connect to Live API");
       setIsConnecting(false);
     }
@@ -356,10 +377,16 @@ Please format your feedback EXACTLY using the following Markdown structure:
       streamRef.current = null;
     }
     
+
     if (audioContextRef.current) {
+      activeSourcesRef.current.forEach(source => {
+        try { source.stop(); } catch(e){}
+      });
+      activeSourcesRef.current = [];
       audioContextRef.current.close();
       audioContextRef.current = null;
     }
+
     
     setIsConnected(false);
     setIsConnecting(false);
@@ -373,7 +400,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
         });
         setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
       } catch (e) {
-        console.error("Failed to request feedback", e);
+
       }
     }
   }, []);
@@ -386,7 +413,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
         });
         setUserTranscript(prev => prev + " " + text);
       } catch (e) {
-        console.error("Failed to send text message", e);
+
       }
     }
   }, []);

@@ -30,7 +30,7 @@ export function useGeneratedBackground(prompt: string) {
           }
         }
       } catch (e) {
-        console.error("Failed to generate background", e);
+
       } finally {
         setIsGenerating(false);
       }
