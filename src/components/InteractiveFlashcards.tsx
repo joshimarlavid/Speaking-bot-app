@@ -6,7 +6,7 @@ import {
   RefreshCw, Award, HelpCircle, GraduationCap, ArrowRight
 } from 'lucide-react';
 import { TOPICS, GRAMMAR_TOPICS } from '../data';
-import { AppTheme } from '../App';
+import { AppTheme } from '../types';
 
 interface InteractiveFlashcardsProps {
   theme: AppTheme;
