@@ -2,12 +2,12 @@ import React from 'react';
 import { AppTheme } from '../types';
 import { THEMES } from '../themes';
 
-export const GothicSkullFlowerFrame: React.FC<{
+export const GothicSkullFlowerFrame = React.memo(({ children, title, icon, theme }: {
   children: React.ReactNode;
   title?: string;
   icon?: React.ReactNode;
   theme?: AppTheme;
-}> = ({ children, title, icon, theme }) => {
+}) => {
   const activeTheme = theme || THEMES.student;
 
   return (
@@ -92,4 +92,4 @@ export const GothicSkullFlowerFrame: React.FC<{
       </div>
     </div>
   );
-};
+});
