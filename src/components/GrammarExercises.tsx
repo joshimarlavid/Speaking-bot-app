@@ -6,7 +6,13 @@ import { EXERCISES } from '../data';
 import { GothicSkullFlowerFrame } from './GothicSkullFlowerFrame';
 import { playClick } from '../utils/audio';
 
-export const GrammarExercises: React.FC<{
+export const GrammarExercises = React.memo(({
+  currentExerciseIndex, setCurrentExerciseIndex, currentExercise, setCurrentExercise, isGeneratingExercise,
+  selectedAnswer, setSelectedAnswer, exercisesCompleted, exerciseStyle, setExerciseStyle, spellInput,
+  setSpellInput, spellHintTriggered, setSpellHintTriggered, unscrambleOptions,
+  unscrambleSelected, setUnscrambleSelected, exerciseStreak, incorrectAttempts, setIncorrectAttempts,
+  spellError, generateNewExercise, handleChoiceSelect, verifyScribeAnswer, verifyUnscrambleAnswer, setUnscrambleOptions
+}: {
   currentExerciseIndex: number;
   setCurrentExerciseIndex: (v: number) => void;
   currentExercise: any;
@@ -33,12 +39,6 @@ export const GrammarExercises: React.FC<{
   verifyScribeAnswer: () => void;
   verifyUnscrambleAnswer: () => void;
   setUnscrambleOptions: (v: any) => void;
-}> = ({
-  currentExerciseIndex, setCurrentExerciseIndex, currentExercise, setCurrentExercise, isGeneratingExercise,
-  selectedAnswer, setSelectedAnswer, exercisesCompleted, exerciseStyle, setExerciseStyle, spellInput,
-  setSpellInput, spellHintTriggered, setSpellHintTriggered, unscrambleOptions,
-  unscrambleSelected, setUnscrambleSelected, exerciseStreak, incorrectAttempts, setIncorrectAttempts,
-  spellError, generateNewExercise, handleChoiceSelect, verifyScribeAnswer, verifyUnscrambleAnswer, setUnscrambleOptions
 }) => {
   const { activeTheme } = useAppContext();
 
@@ -293,4 +293,4 @@ export const GrammarExercises: React.FC<{
       </GothicSkullFlowerFrame>
     </div>
   );
-};
+});

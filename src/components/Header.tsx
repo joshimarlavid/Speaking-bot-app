@@ -3,7 +3,7 @@ import { motion } from 'motion/react';
 import { Trophy, Zap } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 
-export const Header: React.FC = () => {
+export const Header: React.FC = React.memo(() => {
   const { activeTheme, dailyChallenge } = useAppContext();
 
   return (
@@ -80,4 +80,4 @@ export const Header: React.FC = () => {
       </div>
     </>
   );
-};
+});
