@@ -370,9 +370,8 @@ async function startServer() {
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
-        contents: "Generate exercise",
+        contents: prompt,
         config: {
-          systemInstruction: prompt,
           responseMimeType: "application/json"
         }
       });
@@ -399,8 +398,7 @@ async function startServer() {
       const { prompt } = req.body;
       const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey || geminiKey.trim().length < 10) {
-        console.warn("[API WARNING] Missing or invalid GEMINI_API_KEY for background generation");
-        res.status(200).json({ url: null });
+        res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
         return;
       }
 
@@ -428,7 +426,7 @@ async function startServer() {
       res.status(200).json({ url });
     } catch (e) {
       console.error("Failed to generate background:", e);
-      res.status(200).json({ url: null });
+      res.status(500).json({ error: "Failed to generate background" });
     }
   });
 
@@ -453,10 +451,7 @@ async function startServer() {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
           const geminiResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: `Usuario: ${user_input}\nRespuesta:`,
-            config: {
-              systemInstruction: persona_prompt
-            }
+            contents: `${persona_prompt}\nUsuario: ${user_input}\nRespuesta:`,
           });
           text_response = geminiResponse.text || "";
         } catch (apiErr) {
@@ -608,10 +603,7 @@ Keep the tone encouraging, inspiring, and professional.`;
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: "Provide feedback",
-          config: {
-            systemInstruction: systemPrompt
-          }
+          contents: systemPrompt,
         });
         res.status(200).json({ feedback: geminiResponse.text || "Unable to generate feedback at this time." });
       } catch (err) {
@@ -666,9 +658,8 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash",
-          contents: "Generate flashcard",
+          contents: systemPrompt,
           config: {
-            systemInstruction: systemPrompt,
             responseMimeType: "application/json"
           }
         });
