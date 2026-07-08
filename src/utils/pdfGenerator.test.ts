@@ -61,9 +61,39 @@ describe('generatePDFSummary', () => {
     expect(mockAlert).toHaveBeenCalledTimes(1);
   });
 
-  it('should generate PDF successfully', () => {
-     generatePDFSummary('Test Student', 5, 2, []);
 
-     expect(mockDoc.save).toHaveBeenCalledWith('LinguaRole_Grimoire_Test_Student.pdf');
+  it('should generate PDF successfully with empty logs', () => {
+    generatePDFSummary('Test Student', 5, 2, []);
+
+    expect(mockDoc.text).toHaveBeenCalledWith(expect.stringContaining('No prophecies recorded yet. Begin your journey.'), expect.any(Number), expect.any(Number));
+    expect(mockDoc.save).toHaveBeenCalledWith('LinguaRole_Grimoire_Test_Student.pdf');
+  });
+
+  it('should generate PDF successfully with some logs', () => {
+    const logs = [
+      { role: 'Mage', date: '2023-10-27T10:00:00Z', topic: 'Fireballs', ratingAI: 4, ratingTopic: 5, comments: 'Good form' },
+      { role: 'Warrior', date: '2023-10-28T10:00:00Z', topic: 'Swords', ratingAI: 3, ratingTopic: 4, comments: 'Needs work' }
+    ];
+    generatePDFSummary('Test Student', 5, 2, logs);
+
+    expect(mockDoc.roundedRect).toHaveBeenCalled();
+    expect(mockDoc.text).toHaveBeenCalledWith('Mage', expect.any(Number), expect.any(Number));
+    expect(mockDoc.text).toHaveBeenCalledWith('Warrior', expect.any(Number), expect.any(Number));
+    expect(mockDoc.save).toHaveBeenCalledWith('LinguaRole_Grimoire_Test_Student.pdf');
+  });
+
+  it('should add a page when generating PDF with many logs', () => {
+    const logs = [
+      { role: 'Mage', date: '2023-10-27T10:00:00Z', topic: 'Fireballs', ratingAI: 4, ratingTopic: 5, comments: 'Good form' },
+      { role: 'Warrior', date: '2023-10-28T10:00:00Z', topic: 'Swords', ratingAI: 3, ratingTopic: 4, comments: 'Needs work' },
+      { role: 'Rogue', date: '2023-10-29T10:00:00Z', topic: 'Stealth', ratingAI: 5, ratingTopic: 5, comments: 'Excellent' }
+    ];
+    generatePDFSummary('Test Student', 5, 2, logs);
+
+    // Initial yPos = 130
+    // After 3 logs, yPos = 130 + 48 * 3 = 274
+    // 274 > 240, so it should add a page
+    expect(mockDoc.addPage).toHaveBeenCalled();
+    expect(mockDoc.save).toHaveBeenCalledWith('LinguaRole_Grimoire_Test_Student.pdf');
   });
 });
