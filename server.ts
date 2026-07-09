@@ -470,7 +470,11 @@ async function startServer() {
       res.setHeader("x-response-text", encodeURIComponent(text_response));
 
       const elevenApiKey = process.env.ELEVEN_API_KEY;
-      const targetVoice = voice_id || "21m00Tcm4TlvDq8ikWAM"; // Default Rachel voice ID
+      const defaultVoiceId = "21m00Tcm4TlvDq8ikWAM"; // Default Rachel voice ID
+      const isValidVoiceId =
+        typeof voice_id === "string" &&
+        /^[A-Za-z0-9]{20,64}$/.test(voice_id);
+      const targetVoice = isValidVoiceId ? voice_id : defaultVoiceId;
 
       if (!elevenApiKey) {
         // If ElevenLabs key is not present, we return JSON with text response and details
@@ -483,7 +487,7 @@ async function startServer() {
       }
 
       // 2. La voz: ElevenLabs generates audio in real time
-      const elevenResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${targetVoice}/stream`, {
+      const elevenResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(targetVoice)}/stream`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
