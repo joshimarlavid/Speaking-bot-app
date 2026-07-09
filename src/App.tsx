@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
@@ -748,7 +748,7 @@ export default function App() {
   }, []);
 
   const baseFilteredRoles = useMemo(() => {
-    return ROLES.filter(r => mode !== 'beginner' || Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+    return ROLES.filter(r => mode !== 'beginner' || r.id in BEGINNER_DIALOGUES);
   }, [mode]);
 
   const finalFilteredRoles = useMemo(() => {
@@ -1436,7 +1436,7 @@ export default function App() {
                     onClick={() => {
                       playClick();
                       setMode('beginner');
-                      const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+                      const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                       if (firstBeginner) setSelectedRole(firstBeginner);
                     }}
                     disabled={isConnected || isConnecting}
