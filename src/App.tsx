@@ -748,7 +748,7 @@ export default function App() {
   }, []);
 
   const baseFilteredRoles = useMemo(() => {
-    return ROLES.filter(r => mode !== 'beginner' || Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+    return ROLES.filter(r => mode !== 'beginner' || r.id in BEGINNER_DIALOGUES);
   }, [mode]);
 
   const finalFilteredRoles = useMemo(() => {
@@ -1436,7 +1436,7 @@ export default function App() {
                     onClick={() => {
                       playClick();
                       setMode('beginner');
-                      const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+                      const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                       if (firstBeginner) setSelectedRole(firstBeginner);
                     }}
                     disabled={isConnected || isConnecting}
