@@ -317,6 +317,20 @@ export default function App() {
   const [incorrectAttempts, setIncorrectAttempts] = useState<Record<number, boolean>>({});
   const [spellError, setSpellError] = useState(false);
 
+  // Memoize correct words and full sentence to avoid redundant string parsing
+  const { unscrambleCorrectWords, unscrambleFullSentence } = useMemo(() => {
+    if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    try {
+      const correctWord = currentExercise.options[currentExercise.answer];
+      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = fullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
+    } catch (e) {
+      console.error("Failed to parse exercise text", e);
+      return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    }
+  }, [currentExercise]);
+
   // Synchronize new exercise state
   useEffect(() => {
     if (!currentExercise) return;
@@ -328,20 +342,15 @@ export default function App() {
     
     // Prepare sentence unscrambler words
     try {
-      const correctWord = currentExercise.options[currentExercise.answer];
-      // Normalize placeholders
-      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      // Clean up multiple spaces and split
-      const words = fullSentence.split(/\s+/).filter(Boolean);
       // Randomly shuffle
-      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      const shuffled = [...unscrambleCorrectWords].sort(() => Math.random() - 0.5);
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
     } catch (e) {
       console.error("Failed to prepare unscramble options", e);
     }
-  }, [currentExercise]);
+  }, [currentExercise, unscrambleCorrectWords]);
 
   const generateNewExercise = useCallback(async () => {
     setIsGeneratingExercise(true);
@@ -432,11 +441,7 @@ export default function App() {
   const verifyUnscrambleAnswer = useCallback(() => {
     if (!currentExercise || selectedAnswer !== null) return;
     const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-    const correctOption = currentExercise.options[currentExercise.answer];
-    const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctOption);
-    const correctWords = fullSentence.split(/\s+/).filter(Boolean);
-    
-    const isCorrect = unscrambleSelected.map(norm).join(' ') === correctWords.map(norm).join(' ');
+    const isCorrect = unscrambleSelected.map(norm).join(' ') === unscrambleCorrectWords.map(norm).join(' ');
     
     if (isCorrect) {
       setSelectedAnswer(currentExercise.answer);
@@ -450,7 +455,7 @@ export default function App() {
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
-          comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+          comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
           ratingAI: 5,
           ratingTopic: 5
         });
@@ -2207,10 +2212,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     playClick();
-                                    const originalWord = currentExercise.options[currentExercise.answer];
-                                    const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
-                                    const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
+                                    setUnscrambleOptions([...unscrambleCorrectWords].sort(() => Math.random() - 0.5));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
