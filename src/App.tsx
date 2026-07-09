@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
@@ -317,6 +318,20 @@ export default function App() {
   const [incorrectAttempts, setIncorrectAttempts] = useState<Record<number, boolean>>({});
   const [spellError, setSpellError] = useState(false);
 
+  // Memoize correct words and full sentence to avoid redundant string parsing
+  const { unscrambleCorrectWords, unscrambleFullSentence } = useMemo(() => {
+    if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    try {
+      const correctWord = currentExercise.options[currentExercise.answer];
+      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = fullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
+    } catch (e) {
+      console.error("Failed to parse exercise text", e);
+      return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    }
+  }, [currentExercise]);
+
   // Synchronize new exercise state
   useEffect(() => {
     if (!currentExercise) return;
@@ -328,20 +343,15 @@ export default function App() {
     
     // Prepare sentence unscrambler words
     try {
-      const correctWord = currentExercise.options[currentExercise.answer];
-      // Normalize placeholders
-      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      // Clean up multiple spaces and split
-      const words = fullSentence.split(/\s+/).filter(Boolean);
       // Randomly shuffle
-      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      const shuffled = [...unscrambleCorrectWords].sort(() => Math.random() - 0.5);
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
     } catch (e) {
       console.error("Failed to prepare unscramble options", e);
     }
-  }, [currentExercise]);
+  }, [currentExercise, unscrambleCorrectWords]);
 
   const generateNewExercise = useCallback(async () => {
     setIsGeneratingExercise(true);
@@ -432,11 +442,7 @@ export default function App() {
   const verifyUnscrambleAnswer = useCallback(() => {
     if (!currentExercise || selectedAnswer !== null) return;
     const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-    const correctOption = currentExercise.options[currentExercise.answer];
-    const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctOption);
-    const correctWords = fullSentence.split(/\s+/).filter(Boolean);
-    
-    const isCorrect = unscrambleSelected.map(norm).join(' ') === correctWords.map(norm).join(' ');
+    const isCorrect = unscrambleSelected.map(norm).join(' ') === unscrambleCorrectWords.map(norm).join(' ');
     
     if (isCorrect) {
       setSelectedAnswer(currentExercise.answer);
@@ -450,7 +456,7 @@ export default function App() {
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
-          comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+          comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
           ratingAI: 5,
           ratingTopic: 5
         });
@@ -748,7 +754,7 @@ export default function App() {
   }, []);
 
   const baseFilteredRoles = useMemo(() => {
-    return ROLES.filter(r => mode !== 'beginner' || Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+    return ROLES.filter(r => mode !== 'beginner' || r.id in BEGINNER_DIALOGUES);
   }, [mode]);
 
   const finalFilteredRoles = useMemo(() => {
@@ -1436,7 +1442,7 @@ export default function App() {
                     onClick={() => {
                       playClick();
                       setMode('beginner');
-                      const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+                      const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                       if (firstBeginner) setSelectedRole(firstBeginner);
                     }}
                     disabled={isConnected || isConnecting}
@@ -2207,10 +2213,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     playClick();
-                                    const originalWord = currentExercise.options[currentExercise.answer];
-                                    const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
-                                    const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
+                                    setUnscrambleOptions([...unscrambleCorrectWords].sort(() => Math.random() - 0.5));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
