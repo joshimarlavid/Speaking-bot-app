@@ -36,6 +36,18 @@ export interface AppTheme {
   svgSecondary: string;      
 }
 
+const SEARCH_INPUT_CLASSES = [
+  // Layout & Spacing
+  "w-full pl-11 pr-10 py-3 rounded-xl",
+  // Colors & Typography
+  "bg-zinc-950/80 border border-zinc-850 text-blue-200 text-sm font-medium",
+  // Interaction & States
+  "outline-none transition-all",
+  "focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500",
+  "placeholder-blue-500/25",
+  "disabled:opacity-50"
+].join(" ");
+
 export const THEMES: Record<MenuMode, AppTheme> = {
   student: {
     primary: 'blue',
@@ -1532,7 +1544,7 @@ export default function App() {
                             value={roleSearchQuery}
                             onChange={(e) => setRoleSearchQuery(e.target.value)}
                             disabled={isSessionConnected || isSessionConnecting}
-                            className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all placeholder-blue-500/25 disabled:opacity-50 font-medium"
+                            className={SEARCH_INPUT_CLASSES}
                           />
                           {roleSearchQuery && (
                             <button 
