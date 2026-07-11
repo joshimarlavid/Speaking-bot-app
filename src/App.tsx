@@ -396,6 +396,18 @@ export default function App() {
       playReward();
 
       try {
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
+        });
         const newFeedbackLogs = [...feedbackLogs];
         newFeedbackLogs.push({
           role: "Gothic Exercise Tutor",
@@ -428,6 +440,18 @@ export default function App() {
       playReward();
 
       try {
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
+        });
         const newFeedbackLogs = [...feedbackLogs];
         newFeedbackLogs.push({
           role: "Gothic Exercise Tutor",
@@ -463,6 +487,18 @@ export default function App() {
       playReward();
 
       try {
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
+        });
         const newFeedbackLogs = [...feedbackLogs];
         newFeedbackLogs.push({
           role: "Gothic Exercise Tutor",
@@ -702,6 +738,13 @@ export default function App() {
     }
   }, [exercisesCompleted]);
 
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [showFeedback, setShowFeedback] = useState(false);
   const [ratingAI, setRatingAI] = useState(0);
   const [ratingTopic, setRatingTopic] = useState(0);
@@ -1217,6 +1260,11 @@ export default function App() {
       aiReport: aiFeedbackReport
     };
     
+    setFeedbackLogs(prev => {
+      const newLogs = [...prev, feedback];
+      localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+      return newLogs;
+    });
     const existing = feedbackLogs;
     setFeedbackLogs([...existing, feedback]);
     
@@ -2953,6 +3001,11 @@ export default function App() {
                         comments: feedbackText || "Self-study session completed.",
                         aiReport: aiFeedbackReport
                       };
+                      setFeedbackLogs(prev => {
+                        const newLogs = [...prev, feedback];
+                        localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+                        return newLogs;
+                      });
                       const existing = feedbackLogs;
                       setFeedbackLogs([...existing, feedback]);
                       
