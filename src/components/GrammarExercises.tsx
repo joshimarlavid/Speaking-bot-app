@@ -162,7 +162,7 @@ export const GrammarExercises = React.memo(({
                               onClick={() => {
                                 if (selectedAnswer !== null) return;
                                 playClick();
-                                setUnscrambleSelected((prev: any) => prev.filter((_: any, i: number) => i !== idx));
+                                setUnscrambleSelected((prev: any) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
                                 setUnscrambleOptions((prev: any) => [...prev, word]);
                               }}
                               className="px-4 py-2 bg-blue-900/40 text-blue-200 font-bold border border-blue-500/50 rounded-lg shadow-md hover:bg-red-900/40 hover:border-red-500/50 hover:text-red-200 transition-colors"
@@ -182,7 +182,7 @@ export const GrammarExercises = React.memo(({
                               onClick={() => {
                                 if (selectedAnswer !== null) return;
                                 playClick();
-                                setUnscrambleOptions((prev: any) => prev.filter((_: any, i: number) => i !== idx));
+                                setUnscrambleOptions((prev: any) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
                                 setUnscrambleSelected((prev: any) => [...prev, word]);
                               }}
                               className="px-4 py-2 bg-zinc-900 text-zinc-300 font-bold border border-zinc-700 rounded-lg shadow-sm hover:bg-zinc-800 hover:border-amber-500/50 hover:text-amber-300 transition-all active:scale-95"

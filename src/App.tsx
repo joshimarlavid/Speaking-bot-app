@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
@@ -35,6 +36,18 @@ export interface AppTheme {
   svgPrimary: string;        
   svgSecondary: string;      
 }
+
+const SEARCH_INPUT_CLASSES = [
+  // Layout & Spacing
+  "w-full pl-11 pr-10 py-3 rounded-xl",
+  // Colors & Typography
+  "bg-zinc-950/80 border border-zinc-850 text-blue-200 text-sm font-medium",
+  // Interaction & States
+  "outline-none transition-all",
+  "focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500",
+  "placeholder-blue-500/25",
+  "disabled:opacity-50"
+].join(" ");
 
 export const THEMES: Record<MenuMode, AppTheme> = {
   student: {
@@ -317,6 +330,20 @@ export default function App() {
   const [incorrectAttempts, setIncorrectAttempts] = useState<Record<number, boolean>>({});
   const [spellError, setSpellError] = useState(false);
 
+  // Memoize correct words and full sentence to avoid redundant string parsing
+  const { unscrambleCorrectWords, unscrambleFullSentence } = useMemo(() => {
+    if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    try {
+      const correctWord = currentExercise.options[currentExercise.answer];
+      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = fullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
+    } catch (e) {
+      console.error("Failed to parse exercise text", e);
+      return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
+    }
+  }, [currentExercise]);
+
   // Synchronize new exercise state
   useEffect(() => {
     if (!currentExercise) return;
@@ -328,20 +355,15 @@ export default function App() {
     
     // Prepare sentence unscrambler words
     try {
-      const correctWord = currentExercise.options[currentExercise.answer];
-      // Normalize placeholders
-      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      // Clean up multiple spaces and split
-      const words = fullSentence.split(/\s+/).filter(Boolean);
       // Randomly shuffle
-      const shuffled = [...words].sort(() => Math.random() - 0.5);
+      const shuffled = [...unscrambleCorrectWords].sort(() => Math.random() - 0.5);
       
       setUnscrambleOptions(shuffled);
       setUnscrambleSelected([]);
     } catch (e) {
       console.error("Failed to prepare unscramble options", e);
     }
-  }, [currentExercise]);
+  }, [currentExercise, unscrambleCorrectWords]);
 
   const generateNewExercise = useCallback(async () => {
     setIsGeneratingExercise(true);
@@ -386,6 +408,16 @@ export default function App() {
           localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
           return newLogs;
         });
+        const newFeedbackLogs = [...feedbackLogs];
+        newFeedbackLogs.push({
+          role: "Gothic Exercise Tutor",
+          date: new Date().toISOString(),
+          topic: currentExercise.topic,
+          comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
+          ratingAI: 5,
+          ratingTopic: 5
+        });
+        setFeedbackLogs(newFeedbackLogs);
       } catch (e) {
         console.error(e);
       }
@@ -420,6 +452,16 @@ export default function App() {
           localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
           return newLogs;
         });
+        const newFeedbackLogs = [...feedbackLogs];
+        newFeedbackLogs.push({
+          role: "Gothic Exercise Tutor",
+          date: new Date().toISOString(),
+          topic: currentExercise.topic,
+          comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
+          ratingAI: 5,
+          ratingTopic: 5
+        });
+        setFeedbackLogs(newFeedbackLogs);
       } catch (e) {
         console.error(e);
       }
@@ -436,11 +478,7 @@ export default function App() {
   const verifyUnscrambleAnswer = useCallback(() => {
     if (!currentExercise || selectedAnswer !== null) return;
     const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
-    const correctOption = currentExercise.options[currentExercise.answer];
-    const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctOption);
-    const correctWords = fullSentence.split(/\s+/).filter(Boolean);
-    
-    const isCorrect = unscrambleSelected.map(norm).join(' ') === correctWords.map(norm).join(' ');
+    const isCorrect = unscrambleSelected.map(norm).join(' ') === unscrambleCorrectWords.map(norm).join(' ');
     
     if (isCorrect) {
       setSelectedAnswer(currentExercise.answer);
@@ -461,6 +499,16 @@ export default function App() {
           localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
           return newLogs;
         });
+        const newFeedbackLogs = [...feedbackLogs];
+        newFeedbackLogs.push({
+          role: "Gothic Exercise Tutor",
+          date: new Date().toISOString(),
+          topic: currentExercise.topic,
+          comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
+          ratingAI: 5,
+          ratingTopic: 5
+        });
+        setFeedbackLogs(newFeedbackLogs);
       } catch (e) {
         console.error(e);
       }
@@ -761,7 +809,7 @@ export default function App() {
   }, []);
 
   const baseFilteredRoles = useMemo(() => {
-    return ROLES.filter(r => mode !== 'beginner' || Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+    return ROLES.filter(r => mode !== 'beginner' || r.id in BEGINNER_DIALOGUES);
   }, [mode]);
 
   const finalFilteredRoles = useMemo(() => {
@@ -981,6 +1029,13 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -1037,6 +1092,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('linguaRole_role', selectedRole.id);
   }, [selectedRole]);
+
+  useEffect(() => {
+    localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
+  }, [feedbackLogs]);
 
   const rollDice = () => {
     playClick();
@@ -1206,6 +1265,8 @@ export default function App() {
       localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
       return newLogs;
     });
+    const existing = feedbackLogs;
+    setFeedbackLogs([...existing, feedback]);
     
     setShowFeedback(false);
     setRatingAI(0);
@@ -1452,7 +1513,7 @@ export default function App() {
                     onClick={() => {
                       playClick();
                       setMode('beginner');
-                      const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
+                      const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                       if (firstBeginner) setSelectedRole(firstBeginner);
                     }}
                     disabled={isConnected || isConnecting}
@@ -1548,7 +1609,7 @@ export default function App() {
                             value={roleSearchQuery}
                             onChange={(e) => setRoleSearchQuery(e.target.value)}
                             disabled={isSessionConnected || isSessionConnecting}
-                            className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all placeholder-blue-500/25 disabled:opacity-50 font-medium"
+                            className={SEARCH_INPUT_CLASSES}
                           />
                           {roleSearchQuery && (
                             <button 
@@ -2223,10 +2284,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => {
                                     playClick();
-                                    const originalWord = currentExercise.options[currentExercise.answer];
-                                    const fullScen = currentExercise.question.replace(/_____+|____|___/g, originalWord);
-                                    const words = fullScen.split(/\s+/).filter(Boolean);
-                                    setUnscrambleOptions([...words].sort(() => Math.random() - 0.5));
+                                    setUnscrambleOptions([...unscrambleCorrectWords].sort(() => Math.random() - 0.5));
                                     setUnscrambleSelected([]);
                                     setSpellError(false);
                                   }}
@@ -2948,6 +3006,8 @@ export default function App() {
                         localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
                         return newLogs;
                       });
+                      const existing = feedbackLogs;
+                      setFeedbackLogs([...existing, feedback]);
                       
                       setShowFeedback(false);
                       setRatingAI(0);
