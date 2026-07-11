@@ -374,16 +374,18 @@ export default function App() {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
-          ratingAI: 5,
-          ratingTopic: 5
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
         });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -406,16 +408,18 @@ export default function App() {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
-          ratingAI: 5,
-          ratingTopic: 5
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
         });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -445,16 +449,18 @@ export default function App() {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
-          ratingAI: 5,
-          ratingTopic: 5
+        setFeedbackLogs(prev => {
+          const newLogs = [...prev, {
+            role: "Gothic Exercise Tutor",
+            date: new Date().toISOString(),
+            topic: currentExercise.topic,
+            comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+            ratingAI: 5,
+            ratingTopic: 5
+          }];
+          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+          return newLogs;
         });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -477,7 +483,7 @@ export default function App() {
       const lvl = Math.floor(runes / 1000);
       let logs: any[] = [];
       try {
-        logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        logs = feedbackLogs;
       } catch (e) {
         console.error("Local storage error:", e);
       }
@@ -684,6 +690,13 @@ export default function App() {
     }
   }, [exercisesCompleted]);
 
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [showFeedback, setShowFeedback] = useState(false);
   const [ratingAI, setRatingAI] = useState(0);
   const [ratingTopic, setRatingTopic] = useState(0);
@@ -1188,8 +1201,11 @@ export default function App() {
       aiReport: aiFeedbackReport
     };
     
-    const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-    localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
+    setFeedbackLogs(prev => {
+      const newLogs = [...prev, feedback];
+      localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+      return newLogs;
+    });
     
     setShowFeedback(false);
     setRatingAI(0);
@@ -2342,7 +2358,7 @@ export default function App() {
                       </div>
                       <div className={`p-4 rounded-xl border flex items-center gap-3 transition-opacity ${(() => {
                         try {
-                          return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]').length > 0;
+                          return feedbackLogs.length > 0;
                         } catch {
                           return false;
                         }
@@ -2365,7 +2381,7 @@ export default function App() {
                     <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
                       {(() => {
                         try {
-                          const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+                          const logs = feedbackLogs;
                           if (logs.length === 0) {
                             return (
                               <div className="bg-red-950/10 border border-red-950/30 rounded-xl p-6 text-center text-zinc-400">
@@ -2927,8 +2943,11 @@ export default function App() {
                         comments: feedbackText || "Self-study session completed.",
                         aiReport: aiFeedbackReport
                       };
-                      const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-                      localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
+                      setFeedbackLogs(prev => {
+                        const newLogs = [...prev, feedback];
+                        localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
+                        return newLogs;
+                      });
                       
                       setShowFeedback(false);
                       setRatingAI(0);
