@@ -1,0 +1,217 @@
+[
+  {
+    "id": "word_formation",
+    "title": "Word Formation",
+    "description": "Practice forming adjectives from numbers/nouns, verbs, prefixes, suffixes, and -ever words.",
+    "grammar": "Adjectives, Prefixes, Suffixes, -ever words",
+    "vocabulary": [
+      "four-door",
+      "bored",
+      "boring",
+      "overworked",
+      "disagree",
+      "beautify",
+      "whoever",
+      "whenever"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "future_in_past",
+    "title": "The Future in the Past",
+    "description": "Practice using was/were going to, past progressive, and would to describe future events from a past perspective.",
+    "grammar": "was/were going to, past progressive, would, will/would",
+    "vocabulary": [
+      "intended",
+      "planned",
+      "was going to",
+      "would start",
+      "will",
+      "won't"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "spelling_punctuation",
+    "title": "Spelling and Punctuation",
+    "description": "Practice capitalization, possessive forms, plurals, doubling consonants, dropping final -e, homonyms, and punctuation.",
+    "grammar": "Capital letters, Possessives, Plurals, Punctuation",
+    "vocabulary": [
+      "Dr. Smith",
+      "children's",
+      "potatoes",
+      "sitting",
+      "believable",
+      "their/there",
+      "semi-colon"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "present_tenses",
+    "title": "Simple Present vs. Present Progressive",
+    "description": "Practice distinguishing between simple present and present progressive, including non-action verbs and frequency adverbs.",
+    "grammar": "Simple Present, Present Progressive, Frequency Adverbs",
+    "vocabulary": [
+      "usually",
+      "currently",
+      "believe",
+      "taste",
+      "always",
+      "seldom",
+      "never"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "past_and_perfect",
+    "title": "Past and Perfect Tenses",
+    "description": "Practice simple past, past progressive, present perfect, already/yet, for/since, and used to.",
+    "grammar": "Simple Past, Past Progressive, Present Perfect, used to",
+    "vocabulary": [
+      "was raining",
+      "used to",
+      "have known",
+      "already",
+      "yet",
+      "for",
+      "since",
+      "recently"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "prepositions_idioms",
+    "title": "Prepositions and Idioms",
+    "description": "Practice prepositions of time, prepositions after adjectives, verbs followed by prepositions, and idioms with up, down, over, out.",
+    "grammar": "Prepositions, Idioms",
+    "vocabulary": [
+      "during",
+      "until",
+      "keep an eye on",
+      "step up",
+      "enthusiastic about",
+      "rely on"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "phrasal_verbs",
+    "title": "Phrasal Verbs",
+    "description": "Practice separable and inseparable phrasal verbs, three-word phrasal verbs, and nouns derived from phrasal verbs.",
+    "grammar": "Phrasal Verbs",
+    "vocabulary": [
+      "turn in",
+      "look for",
+      "get up",
+      "come up with",
+      "drop out",
+      "catch up on"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "modal_verbs",
+    "title": "Modal Auxiliary Verbs",
+    "description": "Practice modals for ability, permission, advisability, obligation, possibility, and their progressive and past forms.",
+    "grammar": "Modal Verbs (can, could, may, might, should, must, have to)",
+    "vocabulary": [
+      "be able to",
+      "be allowed to",
+      "ought to",
+      "had better",
+      "must not",
+      "don't have to"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "comparisons",
+    "title": "Making Comparisons",
+    "description": "Practice comparative and superlative structures with adjectives and adverbs, and modifying comparisons.",
+    "grammar": "Comparatives, Superlatives",
+    "vocabulary": [
+      "as tall as",
+      "more difficult",
+      "the nicest",
+      "much better",
+      "by far the best"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "connecting_ideas",
+    "title": "Connecting Ideas",
+    "description": "Practice linking phrases for purpose, reason, contrast, and relative/interrogative clauses.",
+    "grammar": "Linking Phrases, Relative Clauses, Interrogative Clauses",
+    "vocabulary": [
+      "in other words",
+      "because of",
+      "so that",
+      "although",
+      "nevertheless",
+      "who",
+      "which",
+      "whose"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "idiomatic_expressions",
+    "title": "Idioms and Idiomatic Expressions",
+    "description": "Practice pair idioms, similes, idioms with colors/numbers/animals/body parts, and uses of get, take, make, and do.",
+    "grammar": "Idioms, Similes, get/take/make/do",
+    "vocabulary": [
+      "sooner or later",
+      "easy as pie",
+      "in the red",
+      "on cloud nine",
+      "get over",
+      "take advantage of",
+      "make a decision"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "causatives",
+    "title": "Causatives",
+    "description": "Practice active and passive forms of causative verbs like have, let, make, and get.",
+    "grammar": "Causatives (have, let, make, get)",
+    "vocabulary": [
+      "have it fixed",
+      "let her borrow",
+      "make them go",
+      "get it done"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "gerunds_infinitives",
+    "title": "Gerunds and Infinitives",
+    "description": "Practice verbs followed by gerunds or infinitives, gerunds after prepositions, and infinitives with too/enough.",
+    "grammar": "Gerunds, Infinitives",
+    "vocabulary": [
+      "enjoy going",
+      "decide to go",
+      "stop to help",
+      "stop helping",
+      "tired of waiting",
+      "too heavy to lift"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  },
+  {
+    "id": "future_forms",
+    "title": "Future Forms",
+    "description": "Practice simple future (will vs. going to), future progressive, future perfect, and future perfect progressive.",
+    "grammar": "will, going to, Future Progressive, Future Perfect",
+    "vocabulary": [
+      "will call",
+      "am going to call",
+      "will be traveling",
+      "will have finished",
+      "will have been living"
+    ],
+    "pronunciation": "example: /ɪɡˈzæmpəl/"
+  }
+]
