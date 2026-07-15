@@ -3,8 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
@@ -335,9 +333,9 @@ export default function App() {
     if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
     try {
       const correctWord = currentExercise.options[currentExercise.answer];
-      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      const words = fullSentence.split(/\s+/).filter(Boolean);
-      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
+      const unscrambleFullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = unscrambleFullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: unscrambleFullSentence };
     } catch (e) {
       console.error("Failed to parse exercise text", e);
       return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
@@ -492,7 +490,7 @@ export default function App() {
             role: "Gothic Exercise Tutor",
             date: new Date().toISOString(),
             topic: currentExercise.topic,
-            comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+            comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
             ratingAI: 5,
             ratingTopic: 5
           }];
@@ -1029,13 +1027,6 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
-  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-    } catch {
-      return [];
-    }
-  });
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -2073,10 +2064,10 @@ export default function App() {
                             onClick={() => {
                               playClick();
                               const correctWord = currentExercise.options[currentExercise.answer];
-                              const fullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
+                              const unscrambleFullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
                               if (window.speechSynthesis) {
                                 window.speechSynthesis.cancel();
-                                const utterance = new SpeechSynthesisUtterance(fullSentence);
+                                const utterance = new SpeechSynthesisUtterance(unscrambleFullSentence);
                                 utterance.lang = 'en-US';
                                 utterance.rate = 0.85;
                                 utterance.pitch = 0.95;
