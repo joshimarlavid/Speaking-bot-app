@@ -4,7 +4,6 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
-import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
@@ -2455,10 +2454,10 @@ export default function App() {
                                 <div className="flex justify-between items-center text-xs text-red-300">
                                   <div className="flex gap-4">
                                     <span className="flex items-center gap-1">
-                                      AI: {Array.from({ length: log.ratingAI || 0 }).map(() => '★').join('')}
+                                      AI: {'★'.repeat(log.ratingAI || 0)}
                                     </span>
                                     <span className="flex items-center gap-1">
-                                      Topic: {Array.from({ length: log.ratingTopic || 0 }).map(() => '★').join('')}
+                                      Topic: {'★'.repeat(log.ratingTopic || 0)}
                                     </span>
                                   </div>
                                   {log.aiReport && (
