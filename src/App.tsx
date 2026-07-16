@@ -2453,10 +2453,10 @@ export default function App() {
                                 <div className="flex justify-between items-center text-xs text-red-300">
                                   <div className="flex gap-4">
                                     <span className="flex items-center gap-1">
-                                      AI: {Array.from({ length: log.ratingAI || 0 }).map(() => '★').join('')}
+                                      AI: {'★'.repeat(log.ratingAI || 0)}
                                     </span>
                                     <span className="flex items-center gap-1">
-                                      Topic: {Array.from({ length: log.ratingTopic || 0 }).map(() => '★').join('')}
+                                      Topic: {'★'.repeat(log.ratingTopic || 0)}
                                     </span>
                                   </div>
                                   {log.aiReport && (
