@@ -80,6 +80,7 @@ describe('audio utilities', () => {
        const { playReward } = await import('./audio');
        playReward();
       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
+       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
     });
   });
 });
