@@ -48,8 +48,7 @@ export const SessionSetup: React.FC<{
               onClick={() => {
                 playClick();
                 setMode('beginner');
-                const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
-                const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
+                                const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                 if (firstBeginner) setSelectedRole(firstBeginner);
               }}
               disabled={isSessionConnected || isSessionConnecting}

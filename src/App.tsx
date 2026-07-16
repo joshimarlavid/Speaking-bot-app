@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
@@ -492,7 +491,7 @@ export default function App() {
             role: "Gothic Exercise Tutor",
             date: new Date().toISOString(),
             topic: currentExercise.topic,
-            comments: `Successfully mastered Incantation order for sentence: "${fullSentence}".`,
+            comments: `Successfully mastered Incantation order for sentence: "${currentExercise.question}".`,
             ratingAI: 5,
             ratingTopic: 5
           }];
@@ -1029,7 +1028,7 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
-  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
+  const [feedbackLogs2, setFeedbackLogs2] = useState<any[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
     } catch {
