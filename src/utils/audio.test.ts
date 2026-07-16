@@ -79,6 +79,7 @@ describe('audio utilities', () => {
        vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
        const { playReward } = await import('./audio');
        playReward();
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
        expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
     });
   });
