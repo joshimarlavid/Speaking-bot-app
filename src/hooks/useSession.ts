@@ -42,7 +42,13 @@ export const useSession = (
 
   const activeUserTranscript = useMemo(() => {
     if (elevenLabsMode) {
-      const lastUser = elevenMessages.slice().reverse().find(m => m.role === 'user');
+      let lastUser;
+      for (let i = elevenMessages.length - 1; i >= 0; i--) {
+        if (elevenMessages[i].role === 'user') {
+          lastUser = elevenMessages[i];
+          break;
+        }
+      }
       return lastUser ? lastUser.text : '';
     }
     return userTranscript;
@@ -50,7 +56,13 @@ export const useSession = (
 
   const activeAiTranscript = useMemo(() => {
     if (elevenLabsMode) {
-      const lastAi = elevenMessages.slice().reverse().find(m => m.role === 'model');
+      let lastAi;
+      for (let i = elevenMessages.length - 1; i >= 0; i--) {
+        if (elevenMessages[i].role === 'model') {
+          lastAi = elevenMessages[i];
+          break;
+        }
+      }
       return lastAi ? lastAi.text : '';
     }
     return aiTranscript;
