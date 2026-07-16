@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { GRAMMAR_TOPICS } from "./src/data.js";
 
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
@@ -345,6 +346,18 @@ async function startServer() {
   app.post("/api/generate-exercise", async (req: express.Request, res: express.Response) => {
     try {
       const { randomTopic } = req.body;
+
+      if (!randomTopic || typeof randomTopic !== 'object' || !randomTopic.id) {
+        res.status(400).json({ error: "Missing or invalid randomTopic" });
+        return;
+      }
+
+      const validTopic = GRAMMAR_TOPICS.find(t => t.id === randomTopic.id);
+      if (!validTopic) {
+        res.status(400).json({ error: "Invalid topic ID provided" });
+        return;
+      }
+
       const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey || geminiKey.trim().length < 10) {
         res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
@@ -353,9 +366,9 @@ async function startServer() {
 
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      const prompt = `Create a new English grammar exercise for the topic: ${randomTopic.title}.
-      Grammar: ${randomTopic.grammar}.
-      Vocabulary: ${randomTopic.vocabulary.join(', ')}.
+      const prompt = `Create a new English grammar exercise for the topic: ${validTopic.title}.
+      Grammar: ${validTopic.grammar}.
+      Vocabulary: ${validTopic.vocabulary.join(', ')}.
       Return ONLY a JSON object (no markdown formatting, no code blocks) with the following structure:
       {
         "question": "string",
