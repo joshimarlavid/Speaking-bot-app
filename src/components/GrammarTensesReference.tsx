@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Sparkles, AlertCircle, Check, X, BookOpen, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Sparkles, AlertCircle, Check, X, BookOpen, Clock, ChevronDown } from 'lucide-react';
 import { ENGLISH_TENSES, TenseData } from '../grammarTenses';
 
 export const GrammarTensesReference: React.FC = () => {
