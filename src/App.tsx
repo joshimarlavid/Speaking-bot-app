@@ -9,6 +9,8 @@ import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
 import { jsPDF } from 'jspdf';
+export const premiumRoleIds = new Set(ROLES.slice(5).map(r => r.id));
+
 
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
@@ -1647,7 +1649,7 @@ export default function App() {
                         ) : (
                           finalFilteredRoles.map((role) => {
                             const isSelected = selectedRole.id === role.id;
-                            const isRolePremium = mode !== 'beginner' && ROLES.findIndex(r => r.id === role.id) >= 5;
+                            const isRolePremium = mode !== 'beginner' && premiumRoleIds.has(role.id);
                             const displayLevel = getRoleLevel(role.id, role.name);
                             
                             // Color scheme mapping
@@ -2637,7 +2639,7 @@ export default function App() {
               <div className="mt-8 pt-6 border-t border-blue-900/50">
                 {!isSessionConnected ? (
                   <>
-                    {mode === 'student' && ROLES.findIndex(r => r.id === selectedRole.id) >= 5 && !isPremium ? (
+                    {mode === 'student' && premiumRoleIds.has(selectedRole.id) && !isPremium ? (
                       <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-6 text-center">
                         <Lock className="mx-auto mb-3 text-amber-500" size={32} />
                         <h3 className="text-amber-400 font-bold tracking-widest uppercase mb-2">Premium Role Locked</h3>
