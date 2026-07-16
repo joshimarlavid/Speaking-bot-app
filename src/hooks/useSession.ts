@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useLiveAPI } from '../useLiveAPI';
 import { playStart, playClick } from '../utils/audio';
 
