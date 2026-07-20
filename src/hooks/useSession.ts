@@ -42,6 +42,13 @@ export const useSession = (
 
   const activeUserTranscript = useMemo(() => {
     if (elevenLabsMode) {
+      let lastUser;
+      for (let i = elevenMessages.length - 1; i >= 0; i--) {
+        if (elevenMessages[i].role === 'user') {
+          lastUser = elevenMessages[i];
+          break;
+        }
+      }
       const lastUser = elevenMessages.findLast(m => m.role === 'user');
       return lastUser ? lastUser.text : '';
     }
@@ -50,6 +57,13 @@ export const useSession = (
 
   const activeAiTranscript = useMemo(() => {
     if (elevenLabsMode) {
+      let lastAi;
+      for (let i = elevenMessages.length - 1; i >= 0; i--) {
+        if (elevenMessages[i].role === 'model') {
+          lastAi = elevenMessages[i];
+          break;
+        }
+      }
       const lastAi = elevenMessages.findLast(m => m.role === 'model');
       return lastAi ? lastAi.text : '';
     }
