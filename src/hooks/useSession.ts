@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useCallback } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useLiveAPI } from '../useLiveAPI';
 import { playStart, playClick } from '../utils/audio';
 
@@ -49,6 +49,7 @@ export const useSession = (
           break;
         }
       }
+      const lastUser = elevenMessages.findLast(m => m.role === 'user');
       return lastUser ? lastUser.text : '';
     }
     return userTranscript;
@@ -63,6 +64,7 @@ export const useSession = (
           break;
         }
       }
+      const lastAi = elevenMessages.findLast(m => m.role === 'model');
       return lastAi ? lastAi.text : '';
     }
     return aiTranscript;
