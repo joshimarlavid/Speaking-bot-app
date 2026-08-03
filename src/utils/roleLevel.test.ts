@@ -25,6 +25,8 @@ describe('getRoleLevel', () => {
   });
 
   it('should fallback to roleId map when roleName has no level', () => {
+  });
+
   it('extracts role level from roleName correctly', () => {
     // Tests for specific string inclusions
     expect(getRoleLevel('any_id', 'Beginner A1/A2')).toBe('A1/A2');
