@@ -15,15 +15,17 @@ export const GrammarTensesReference: React.FC = () => {
   }, []);
 
   const filteredTenses = useMemo(() => {
+    const lowerQuery = searchQuery.toLowerCase();
+    const lowerTimeline = selectedTimeline.toLowerCase();
     return ENGLISH_TENSES.filter(tense => {
       const matchesSearch = 
-        tense.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tense.useCase.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tense.rules.toLowerCase().includes(searchQuery.toLowerCase());
+        tense.name.toLowerCase().includes(lowerQuery) ||
+        tense.useCase.toLowerCase().includes(lowerQuery) ||
+        tense.rules.toLowerCase().includes(lowerQuery);
       
       const matchesTimeline = 
         selectedTimeline === 'All' || 
-        tense.timeline.toLowerCase().includes(selectedTimeline.toLowerCase());
+        tense.timeline.toLowerCase().includes(lowerTimeline);
 
       return matchesSearch && matchesTimeline;
     });
