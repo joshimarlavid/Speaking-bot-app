@@ -1024,6 +1024,13 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [feedbackLogs2, setFeedbackLogs2] = useState<any[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
