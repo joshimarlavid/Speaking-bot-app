@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { 
   BookOpen, Sparkles, Volume2, RotateCcw, Check, X, 
   ChevronRight, ChevronLeft, Play, Pause, Trash2, 
