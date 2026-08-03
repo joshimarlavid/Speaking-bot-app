@@ -261,7 +261,19 @@ async function startServer() {
   app.use(express.json());
 
   // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
-  app.use('/api/gemini', createProxyMiddleware({
+  app.use('/api/gemini', (req, res, next) => {
+    // Authenticate the proxy request
+    if (req.query.key !== 'lingua-role-secret-token') {
+      return res.status(401).json({ error: "Unauthorized access to Gemini Proxy" });
+    }
+
+    // Only allow the Live API websocket path to prevent general proxy abuse
+    if (!req.path.startsWith('/ws/') || !req.path.includes('BidiGenerateContent')) {
+      return res.status(403).json({ error: "Forbidden: Overly permissive proxy access blocked." });
+    }
+
+    next();
+  }, createProxyMiddleware({
     target: 'https://generativelanguage.googleapis.com',
     changeOrigin: true,
     ws: true,
@@ -270,18 +282,12 @@ async function startServer() {
     },
     onProxyReq: (proxyReq: any, req: any, res: any) => {
       if (process.env.GEMINI_API_KEY) {
-        if (!proxyReq.path.includes('key=')) {
-          const sep = proxyReq.path.includes('?') ? '&' : '?';
-          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
-        }
+        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
       }
     },
     onProxyReqWs: (proxyReq: any, req: any, socket: any, options: any, head: any) => {
       if (process.env.GEMINI_API_KEY) {
-        if (!proxyReq.path.includes('key=')) {
-          const sep = proxyReq.path.includes('?') ? '&' : '?';
-          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
-        }
+        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
       }
     }
   } as any));
