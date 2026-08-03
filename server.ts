@@ -3,6 +3,14 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { TOPICS, GRAMMAR_TOPICS } from "./src/data";
+
+const DEFAULT_BG = "sublime high contrast deep abyssal ocean bed seascape, glowing bioluminescent neon blue jellyfish and flora, vibrant neon green coral reefs and neon purple sea anemone, realistic underwater light-beams caustics, shimmering water texture with glowing particulate bubbles, dark atmospheric depths, magical fantasy art, ultra realistic aquatic rendering";
+const topicTitles = new Set(TOPICS.map(t => t.title));
+const grammarTitles = new Set(GRAMMAR_TOPICS.map(t => t.title));
+const topicPrefix = "A gothic, mystical background representing the topic ";
+const grammarPrefix = "A gothic, mystical background representing the grammar topic ";
+
 
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
@@ -397,6 +405,24 @@ async function startServer() {
   app.post("/api/generate-background", async (req: express.Request, res: express.Response) => {
     try {
       const { prompt } = req.body;
+
+      let isValidPrompt = false;
+      if (prompt === DEFAULT_BG) {
+        isValidPrompt = true;
+      } else if (typeof prompt === 'string' && prompt.startsWith(topicPrefix)) {
+        const title = prompt.slice(topicPrefix.length);
+        if (title === "undefined" || topicTitles.has(title)) isValidPrompt = true;
+      } else if (typeof prompt === 'string' && prompt.startsWith(grammarPrefix)) {
+        const title = prompt.slice(grammarPrefix.length);
+        if (title === "undefined" || grammarTitles.has(title)) isValidPrompt = true;
+      }
+
+      if (!isValidPrompt) {
+        console.warn("[SECURITY WARNING] Rejected arbitrary image generation prompt:", prompt);
+        res.status(400).json({ error: "Invalid prompt for background generation" });
+        return;
+      }
+
       const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey || geminiKey.trim().length < 10) {
         console.warn("[API WARNING] Missing or invalid GEMINI_API_KEY for background generation");
