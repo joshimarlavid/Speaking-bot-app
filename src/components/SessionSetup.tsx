@@ -9,6 +9,9 @@ import { ROLES, TOPICS, GRAMMAR_TOPICS } from '../data';
 import { BEGINNER_DIALOGUES } from '../beginnerDialogues';
 import { playClick } from '../utils/audio';
 
+const PREMIUM_ROLE_IDS = new Set(ROLES.slice(5).map(r => r.id));
+
+
 export const SessionSetup: React.FC<{
   elevenLabsMode: boolean;
   setElevenLabsMode: (v: boolean) => void;
@@ -48,8 +51,7 @@ export const SessionSetup: React.FC<{
               onClick={() => {
                 playClick();
                 setMode('beginner');
-                const firstBeginner = ROLES.find(r => Object.keys(BEGINNER_DIALOGUES).includes(r.id));
-                const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
+                                const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                 if (firstBeginner) setSelectedRole(firstBeginner);
               }}
               disabled={isSessionConnected || isSessionConnecting}
@@ -196,7 +198,7 @@ export const SessionSetup: React.FC<{
                   ) : (
                     finalFilteredRoles.map((role) => {
                       const isSelected = selectedRole.id === role.id;
-                      const isRolePremium = mode !== 'beginner' && ROLES.findIndex(r => r.id === role.id) >= 5;
+                      const isRolePremium = mode !== 'beginner' && PREMIUM_ROLE_IDS.has(role.id);
                       const displayLevel = getRoleLevel(role.id, role.name);
 
                       const levelBadgeColors: Record<string, string> = {

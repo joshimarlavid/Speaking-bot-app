@@ -2,9 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
-import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
@@ -264,6 +262,7 @@ const GothicSkullFlowerFrame: React.FC<{
 };
 
 export default function App() {
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
   const [mode, setMode] = useState<MenuMode>(() => {
     return (localStorage.getItem('linguaRole_mode') as MenuMode) || 'student';
   });
@@ -492,7 +491,7 @@ export default function App() {
             role: "Gothic Exercise Tutor",
             date: new Date().toISOString(),
             topic: currentExercise.topic,
-            comments: `Successfully mastered Incantation order for sentence: "${currentExercise.question}".`,
+
             comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
             ratingAI: 5,
             ratingTopic: 5
