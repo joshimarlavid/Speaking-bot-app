@@ -1,13 +1,18 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { safeGetFeedbackLogs } from "./utils/storage";
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
 import { jsPDF } from 'jspdf';
+export const premiumRoleIds = new Set(ROLES.slice(5).map(r => r.id));
+
 
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
@@ -263,6 +268,7 @@ const GothicSkullFlowerFrame: React.FC<{
 };
 
 export default function App() {
+  const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
   const [mode, setMode] = useState<MenuMode>(() => {
     return (localStorage.getItem('linguaRole_mode') as MenuMode) || 'student';
   });
@@ -334,9 +340,9 @@ export default function App() {
     if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
     try {
       const correctWord = currentExercise.options[currentExercise.answer];
-      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      const words = fullSentence.split(/\s+/).filter(Boolean);
-      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
+      const unscrambleFullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = unscrambleFullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: unscrambleFullSentence };
     } catch (e) {
       console.error("Failed to parse exercise text", e);
       return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
@@ -492,6 +498,8 @@ export default function App() {
             date: new Date().toISOString(),
             topic: currentExercise.topic,
             comments: `Successfully mastered Incantation order for sentence: "${currentExercise.question.replace(/_____+|____|___/g, currentExercise.options[currentExercise.answer])}"`,
+
+            comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
             ratingAI: 5,
             ratingTopic: 5
           }];
@@ -737,13 +745,6 @@ export default function App() {
     }
   }, [exercisesCompleted]);
 
-  const [feedbackLogs, setFeedbackLogs] = useState<any[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-    } catch {
-      return [];
-    }
-  });
   const [showFeedback, setShowFeedback] = useState(false);
   const [ratingAI, setRatingAI] = useState(0);
   const [ratingTopic, setRatingTopic] = useState(0);
@@ -1028,6 +1029,13 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
+  const [feedbackLogs2, setFeedbackLogs2] = useState<any[]>(() => {
+    try {
+      return safeGetFeedbackLogs();
+    } catch {
+      return [];
+    }
+  });
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -1652,7 +1660,7 @@ export default function App() {
                         ) : (
                           finalFilteredRoles.map((role) => {
                             const isSelected = selectedRole.id === role.id;
-                            const isRolePremium = mode !== 'beginner' && ROLES.findIndex(r => r.id === role.id) >= 5;
+                            const isRolePremium = mode !== 'beginner' && premiumRoleIds.has(role.id);
                             const displayLevel = getRoleLevel(role.id, role.name);
                             
                             // Color scheme mapping
@@ -2065,10 +2073,10 @@ export default function App() {
                             onClick={() => {
                               playClick();
                               const correctWord = currentExercise.options[currentExercise.answer];
-                              const fullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
+                              const unscrambleFullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
                               if (window.speechSynthesis) {
                                 window.speechSynthesis.cancel();
-                                const utterance = new SpeechSynthesisUtterance(fullSentence);
+                                const utterance = new SpeechSynthesisUtterance(unscrambleFullSentence);
                                 utterance.lang = 'en-US';
                                 utterance.rate = 0.85;
                                 utterance.pitch = 0.95;
@@ -2458,10 +2466,10 @@ export default function App() {
                                 <div className="flex justify-between items-center text-xs text-red-300">
                                   <div className="flex gap-4">
                                     <span className="flex items-center gap-1">
-                                      AI: {Array.from({ length: log.ratingAI || 0 }).map(() => '★').join('')}
+                                      AI: {'★'.repeat(log.ratingAI || 0)}
                                     </span>
                                     <span className="flex items-center gap-1">
-                                      Topic: {Array.from({ length: log.ratingTopic || 0 }).map(() => '★').join('')}
+                                      Topic: {'★'.repeat(log.ratingTopic || 0)}
                                     </span>
                                   </div>
                                   {log.aiReport && (
@@ -2642,7 +2650,7 @@ export default function App() {
               <div className="mt-8 pt-6 border-t border-blue-900/50">
                 {!isSessionConnected ? (
                   <>
-                    {mode === 'student' && ROLES.findIndex(r => r.id === selectedRole.id) >= 5 && !isPremium ? (
+                    {mode === 'student' && premiumRoleIds.has(selectedRole.id) && !isPremium ? (
                       <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-6 text-center">
                         <Lock className="mx-auto mb-3 text-amber-500" size={32} />
                         <h3 className="text-amber-400 font-bold tracking-widest uppercase mb-2">Premium Role Locked</h3>

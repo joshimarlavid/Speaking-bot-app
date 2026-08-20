@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, MessageSquare, AlertCircle, Play, Square, Star, Lock, EyeOff, Eye, Check, RefreshCw, Send, Mail, BookOpen } from 'lucide-react';
+import { Mic, MicOff, MessageSquare, AlertCircle, Play, Square, Star, EyeOff, Eye, Check, RefreshCw, Send, Mail, BookOpen } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 import { BEGINNER_DIALOGUES } from '../beginnerDialogues';
 import { GrammarTensesReference } from './GrammarTensesReference';

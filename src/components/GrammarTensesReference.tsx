@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Search, Sparkles, AlertCircle, Check, X, BookOpen, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, Sparkles, AlertCircle, Check, X, BookOpen, Clock, ChevronDown } from 'lucide-react';
 import { ENGLISH_TENSES, TenseData } from '../grammarTenses';
 
 export const GrammarTensesReference: React.FC = () => {
@@ -15,15 +15,17 @@ export const GrammarTensesReference: React.FC = () => {
   }, []);
 
   const filteredTenses = useMemo(() => {
+    const lowerQuery = searchQuery.toLowerCase();
+    const lowerTimeline = selectedTimeline.toLowerCase();
     return ENGLISH_TENSES.filter(tense => {
       const matchesSearch = 
-        tense.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tense.useCase.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tense.rules.toLowerCase().includes(searchQuery.toLowerCase());
+        tense.name.toLowerCase().includes(lowerQuery) ||
+        tense.useCase.toLowerCase().includes(lowerQuery) ||
+        tense.rules.toLowerCase().includes(lowerQuery);
       
       const matchesTimeline = 
         selectedTimeline === 'All' || 
-        tense.timeline.toLowerCase().includes(selectedTimeline.toLowerCase());
+        tense.timeline.toLowerCase().includes(lowerTimeline);
 
       return matchesSearch && matchesTimeline;
     });
