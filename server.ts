@@ -11,6 +11,7 @@ const grammarTitles = new Set(GRAMMAR_TOPICS.map(t => t.title));
 const topicPrefix = "A gothic, mystical background representing the topic ";
 const grammarPrefix = "A gothic, mystical background representing the grammar topic ";
 
+import { GRAMMAR_TOPICS } from "./src/data.js";
 
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
@@ -268,7 +269,19 @@ async function startServer() {
   app.use(express.json());
 
   // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
-  app.use('/api/gemini', createProxyMiddleware({
+  app.use('/api/gemini', (req, res, next) => {
+    // Authenticate the proxy request
+    if (req.query.key !== 'lingua-role-secret-token') {
+      return res.status(401).json({ error: "Unauthorized access to Gemini Proxy" });
+    }
+
+    // Only allow the Live API websocket path to prevent general proxy abuse
+    if (!req.path.startsWith('/ws/') || !req.path.includes('BidiGenerateContent')) {
+      return res.status(403).json({ error: "Forbidden: Overly permissive proxy access blocked." });
+    }
+
+    next();
+  }, createProxyMiddleware({
     target: 'https://generativelanguage.googleapis.com',
     changeOrigin: true,
     ws: true,
@@ -277,18 +290,12 @@ async function startServer() {
     },
     onProxyReq: (proxyReq: any, req: any, res: any) => {
       if (process.env.GEMINI_API_KEY) {
-        if (!proxyReq.path.includes('key=')) {
-          const sep = proxyReq.path.includes('?') ? '&' : '?';
-          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
-        }
+        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
       }
     },
     onProxyReqWs: (proxyReq: any, req: any, socket: any, options: any, head: any) => {
       if (process.env.GEMINI_API_KEY) {
-        if (!proxyReq.path.includes('key=')) {
-          const sep = proxyReq.path.includes('?') ? '&' : '?';
-          proxyReq.path = proxyReq.path + sep + 'key=' + process.env.GEMINI_API_KEY;
-        }
+        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
       }
     }
   } as any));
@@ -353,6 +360,18 @@ async function startServer() {
   app.post("/api/generate-exercise", async (req: express.Request, res: express.Response) => {
     try {
       const { randomTopic } = req.body;
+
+      if (!randomTopic || typeof randomTopic !== 'object' || !randomTopic.id) {
+        res.status(400).json({ error: "Missing or invalid randomTopic" });
+        return;
+      }
+
+      const validTopic = GRAMMAR_TOPICS.find(t => t.id === randomTopic.id);
+      if (!validTopic) {
+        res.status(400).json({ error: "Invalid topic ID provided" });
+        return;
+      }
+
       const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey || geminiKey.trim().length < 10) {
         res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
@@ -361,9 +380,9 @@ async function startServer() {
 
       const ai = new GoogleGenAI({ apiKey: geminiKey });
 
-      const prompt = `Create a new English grammar exercise for the topic: ${randomTopic.title}.
-      Grammar: ${randomTopic.grammar}.
-      Vocabulary: ${randomTopic.vocabulary.join(', ')}.
+      const prompt = `Create a new English grammar exercise for the topic: ${validTopic.title}.
+      Grammar: ${validTopic.grammar}.
+      Vocabulary: ${validTopic.vocabulary.join(', ')}.
       Return ONLY a JSON object (no markdown formatting, no code blocks) with the following structure:
       {
         "question": "string",
