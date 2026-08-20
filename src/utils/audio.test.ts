@@ -76,6 +76,10 @@ describe('audio utilities', () => {
     });
 
     it('should handle errors gracefully', async () => {
+       vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
+       const { playReward } = await import('./audio');
+       playReward();
+       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));    });
       mockAudioContext.createOscillator.mockImplementationOnce(() => {
         throw new Error('Audio setup failed');
       });
