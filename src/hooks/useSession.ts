@@ -1,4 +1,5 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef } from "react";
+import { safeGetFeedbackLogs } from "../utils/storage";
 import { useLiveAPI } from '../useLiveAPI';
 import { playStart, playClick } from '../utils/audio';
 
@@ -318,7 +319,7 @@ export const useSession = (
       aiReport: aiFeedbackReport
     };
 
-    const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    const existing = safeGetFeedbackLogs();
     localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
 
     setShowFeedback(false);

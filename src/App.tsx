@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { safeGetFeedbackLogs } from "./utils/storage";
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -1026,7 +1027,7 @@ export default function App() {
   const [challengeCompleted, setChallengeCompleted] = useState(false);
   const [feedbackLogs2, setFeedbackLogs2] = useState<any[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+      return safeGetFeedbackLogs();
     } catch {
       return [];
     }

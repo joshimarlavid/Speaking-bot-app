@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from "react";
+import { safeGetFeedbackLogs } from "../utils/storage";
 import { EXERCISES, GRAMMAR_TOPICS } from '../data';
 import { playReward, playClick } from '../utils/audio';
 
@@ -71,7 +72,7 @@ export const useExercises = () => {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
@@ -103,7 +104,7 @@ export const useExercises = () => {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
@@ -143,7 +144,7 @@ export const useExercises = () => {
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
