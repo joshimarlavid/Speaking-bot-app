@@ -36,14 +36,14 @@ export const SessionSetup: React.FC<{
             <button
               onClick={() => { playClick(); setMode('student'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'student' ? 'bg-blue-500 text-black shadow-[0_0_12px_rgba(59,130,246,0.5)] border border-blue-400/50' : 'text-blue-300/60 hover:text-blue-200 hover:bg-blue-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'student' ? 'bg-blue-500 text-black shadow-[0_0_[...]
             >
               Student
             </button>
             <button
               onClick={() => { playClick(); setMode('teacher'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'teacher' ? 'bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.5)] border border-emerald-400/50' : 'text-emerald-300/60 hover:text-emerald-200 hover:bg-emerald-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'teacher' ? 'bg-emerald-500 text-black shadow-[0[...]
             >
               Teacher
             </button>
@@ -52,31 +52,32 @@ export const SessionSetup: React.FC<{
                 playClick();
                 setMode('beginner');
                                 const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
+                const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                 if (firstBeginner) setSelectedRole(firstBeginner);
               }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'beginner' ? 'bg-purple-500 text-black shadow-[0_0_12px_rgba(139,92,246,0.5)] border border-purple-400/50' : 'text-purple-300/60 hover:text-purple-200 hover:bg-purple-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'beginner' ? 'bg-purple-500 text-black shadow-[0[...]
             >
               Beginner
             </button>
             <button
               onClick={() => { playClick(); setMode('exercises'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'exercises' ? 'bg-amber-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.5)] border border-amber-400/50' : 'text-amber-300/60 hover:text-amber-200 hover:bg-amber-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'exercises' ? 'bg-amber-500 text-black shadow-[0[...]
             >
               Exercises
             </button>
             <button
               onClick={() => { playClick(); setMode('progress'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'progress' ? 'bg-red-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.5)] border border-red-500/50' : 'text-red-400/60 hover:text-red-200 hover:bg-red-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'progress' ? 'bg-red-600 text-white shadow-[0_0_[...]
             >
               Progress
             </button>
             <button
               onClick={() => { playClick(); setMode('flashcards'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[100px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'flashcards' ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.5)] border border-indigo-500/50' : 'text-indigo-400/60 hover:text-indigo-200 hover:bg-indigo-500/10'} disabled:opacity-50`}
+              className={`flex-1 py-2 px-3 min-w-[100px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'flashcards' ? 'bg-indigo-600 text-white shadow[...]
             >
               Flashcards
             </button>
@@ -92,7 +93,7 @@ export const SessionSetup: React.FC<{
                   onChange={(e) => setStudentName(e.target.value)}
                   disabled={isSessionConnected || isSessionConnecting}
                   placeholder="Enter your name..."
-                  className="w-full bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500 transition-all disabled:opacity-50 font-medium"
+                  className="w-full bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500 transition-al[...]
                 />
               </div>
 
@@ -112,7 +113,7 @@ export const SessionSetup: React.FC<{
                     type="button"
                     disabled={isSessionConnected || isSessionConnecting}
                     onClick={() => { playClick(); setElevenLabsMode(false); }}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${!elevenLabsMode ? 'bg-blue-500 text-black shadow-[0_0_8px_rgba(6,182,212,0.4)]' : 'text-blue-400/60 hover:text-blue-300'} disabled:opacity-50`}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${!elevenLabsMode ? 'bg-blue-500 text-black shadow-[0_0_8px_rgba(6,182,212,0.4)]' [...]
                   >
                     Gemini Live
                   </button>
@@ -120,7 +121,7 @@ export const SessionSetup: React.FC<{
                     type="button"
                     disabled={isSessionConnected || isSessionConnecting}
                     onClick={() => { playClick(); setElevenLabsMode(true); }}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${elevenLabsMode ? 'bg-fuchsia-500 text-white shadow-[0_0_8px_rgba(217,70,239,0.4)]' : 'text-fuchsia-400/60 hover:text-fuchsia-300'} disabled:opacity-50`}
+                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${elevenLabsMode ? 'bg-fuchsia-500 text-white shadow-[0_0_8px_rgba(217,70,239,0.4)[...]
                   >
                     ElevenLabs Pro
                   </button>
@@ -147,7 +148,7 @@ export const SessionSetup: React.FC<{
                       value={roleSearchQuery}
                       onChange={(e) => setRoleSearchQuery(e.target.value)}
                       disabled={isSessionConnected || isSessionConnecting}
-                      className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all placeholder-blue-500/25 disabled:opacity-50 font-medium"
+                      className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-[...]
                     />
                     {roleSearchQuery && (
                       <button
@@ -245,7 +246,7 @@ export const SessionSetup: React.FC<{
                                 <Sparkles size={12} className="text-amber-400 animate-pulse shrink-0" />
                               )}
                             </div>
-                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${levelBadgeColors[displayLevel] || "bg-zinc-800/50 text-zinc-400 border-zinc-700/50"}`}>
+                            <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${levelBadgeColors[displayLevel] || "bg-zinc-800/50 text-zinc-[...]
                               {displayLevel}
                             </span>
                           </div>

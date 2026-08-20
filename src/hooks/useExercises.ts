@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from "react";
+import { safeGetFeedbackLogs } from "../utils/storage";
 import { EXERCISES, GRAMMAR_TOPICS } from '../data';
 import { playReward, playClick } from '../utils/audio';
-import { GoogleGenAI } from '@google/genai';
 
 export const useExercises = () => {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
@@ -35,29 +35,20 @@ export const useExercises = () => {
   const generateNewExercise = useCallback(async () => {
     setIsGeneratingExercise(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
       const randomTopic = GRAMMAR_TOPICS[Math.floor(Math.random() * GRAMMAR_TOPICS.length)];
 
-      const prompt = `Create a new English grammar exercise for the topic: ${randomTopic.title}.
-Return ONLY a valid JSON object matching this exact structure:
-{
-  "topic": "${randomTopic.title}",
-  "question": "Sentence with a _____ blank.",
-  "options": ["wrong", "correct", "wrong"],
-  "answer": 1,
-  "explanation": "Brief reason why it's correct."
-}`;
-
-      const result = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt
+      const response = await fetch('/api/generate-exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ randomTopic })
       });
 
-      const text = result.text || "";
-      const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
-      const exercise = JSON.parse(cleaned);
+      if (!response.ok) {
+        throw new Error("Failed to generate exercise");
+      }
 
-      setCurrentExercise(exercise);
+      const exercise = await response.json();
+      setCurrentExercise({ ...exercise, topic: randomTopic.title });
     } catch (e) {
       console.error("Failed to generate exercise:", e);
       const randomPreloaded = EXERCISES[Math.floor(Math.random() * EXERCISES.length)];
@@ -81,7 +72,7 @@ Return ONLY a valid JSON object matching this exact structure:
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
@@ -113,7 +104,7 @@ Return ONLY a valid JSON object matching this exact structure:
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
@@ -153,7 +144,7 @@ Return ONLY a valid JSON object matching this exact structure:
       playReward();
 
       try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        const feedbackLogs = safeGetFeedbackLogs();
         feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),

@@ -5,6 +5,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { GothicSkullFlowerFrame } from './GothicSkullFlowerFrame';
 import { generatePDFSummary } from '../utils/pdfGenerator';
 import { playClick } from '../utils/audio';
+import { safeGetFeedbackLogs } from "../utils/storage";
 
 export const ProgressLedger: React.FC<{
   exercisesCompleted: number;
@@ -13,7 +14,9 @@ export const ProgressLedger: React.FC<{
   const { activeTheme, studentName } = useAppContext();
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
 
-  const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+
+
+  const logs = safeGetFeedbackLogs();
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pb-12 mt-8">
