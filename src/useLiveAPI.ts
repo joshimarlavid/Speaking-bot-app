@@ -303,7 +303,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 source.start(nextPlayTimeRef.current);
                 nextPlayTimeRef.current += audioBuffer.duration;
               } catch (e) {
-                console.error("Error playing audio chunk", e);
+                // Ignore audio decoding/playback errors for individual chunks
               }
             }
             }
