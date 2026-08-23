@@ -305,10 +305,14 @@ export default function App() {
     const defaultTopicId = role ? role.topicId : null;
     
     const saved = localStorage.getItem('linguaRole_topic');
-    if (saved && TOPICS.find(t => t.id === saved)) {
-      return TOPICS.find(t => t.id === saved)!;
-    } else if (defaultTopicId && TOPICS.find(t => t.id === defaultTopicId)) {
-      return TOPICS.find(t => t.id === defaultTopicId)!;
+    if (saved) {
+      const foundSaved = TOPICS.find(t => t.id === saved);
+      if (foundSaved) return foundSaved;
+    }
+
+    if (defaultTopicId) {
+      const foundDefault = TOPICS.find(t => t.id === defaultTopicId);
+      if (foundDefault) return foundDefault;
     }
     return TOPICS[0];
   });
