@@ -341,7 +341,7 @@ export default function App() {
     try {
       const correctWord = currentExercise.options[currentExercise.answer];
       const unscrambleFullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      const words = unscrambleFullSentence.split(/\s+/).filter(Boolean);
+      const words = unscrambleFullSentence.match(/\S+/g) || [];
       return { unscrambleCorrectWords: words, unscrambleFullSentence: unscrambleFullSentence };
     } catch (e) {
       console.error("Failed to parse exercise text", e);

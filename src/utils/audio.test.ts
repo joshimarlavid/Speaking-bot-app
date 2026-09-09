@@ -79,20 +79,7 @@ describe('audio utilities', () => {
        vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
        const { playReward } = await import('./audio');
        playReward();
-       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));    });
-      mockAudioContext.createOscillator.mockImplementationOnce(() => {
-        throw new Error('Audio setup failed');
-      });
-      const { playStart } = await import('./audio');
-      playStart();
-      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(Error));
-
-      vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
-
-      vi.resetModules();
-      const { playReward } = await import('./audio');
-      playReward();
-      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
+       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
     });
   });
 });
