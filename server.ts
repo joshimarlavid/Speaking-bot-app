@@ -265,13 +265,15 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  const PROXY_SECRET_TOKEN = process.env.VITE_PROXY_SECRET_TOKEN || 'lingua-role-secret-token';
+
   // Use JSON middleware for POST requests
   app.use(express.json());
 
   // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
   app.use('/api/gemini', (req, res, next) => {
     // Authenticate the proxy request
-    if (req.query.key !== 'lingua-role-secret-token') {
+    if (req.query.key !== PROXY_SECRET_TOKEN) {
       return res.status(401).json({ error: "Unauthorized access to Gemini Proxy" });
     }
 
@@ -290,12 +292,12 @@ async function startServer() {
     },
     onProxyReq: (proxyReq: any, req: any, res: any) => {
       if (process.env.GEMINI_API_KEY) {
-        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
+        proxyReq.path = proxyReq.path.replace('key=' + PROXY_SECRET_TOKEN, 'key=' + process.env.GEMINI_API_KEY);
       }
     },
     onProxyReqWs: (proxyReq: any, req: any, socket: any, options: any, head: any) => {
       if (process.env.GEMINI_API_KEY) {
-        proxyReq.path = proxyReq.path.replace('key=lingua-role-secret-token', 'key=' + process.env.GEMINI_API_KEY);
+        proxyReq.path = proxyReq.path.replace('key=' + PROXY_SECRET_TOKEN, 'key=' + process.env.GEMINI_API_KEY);
       }
     }
   } as any));

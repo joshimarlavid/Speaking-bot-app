@@ -28,9 +28,10 @@ export function useLiveAPI() {
     setUserTranscript("");
     setAiTranscript("");
 
+    const proxySecret = import.meta.env.VITE_PROXY_SECRET_TOKEN || 'lingua-role-secret-token';
     try {
-            const ai = new GoogleGenAI({
-        apiKey: 'lingua-role-secret-token', // Dummy key to pass validation; actual key is appended by proxy
+      const ai = new GoogleGenAI({
+        apiKey: proxySecret, // Dummy key to pass validation; actual key is appended by proxy
         httpOptions: {
           baseUrl: window.location.protocol + '//' + window.location.host + '/api/gemini'
         }
