@@ -1,0 +1,21 @@
+services:
+  web:
+    image: node:22-slim
+    working_dir: /app
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - DISABLE_HMR=true
+      - PUPPETEER_SKIP_DOWNLOAD=true
+      - PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+      - NODE_ENV=development
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+    env_file:
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    command: sh -c "npm install && npx tsx server.ts"
+    depends_on: []
+    restart: unless-stopped

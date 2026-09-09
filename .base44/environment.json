@@ -1,0 +1,18 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Google Gemini API key for AI features (roleplay, flashcards, grammar exercises, feedback). Get it from https://aistudio.google.com/apikey. The app has offline fallbacks without it, but AI features will be limited.",
+      "requiredAtBoot": false,
+      "generatedForDevelopment": true
+    },
+    {
+      "name": "ELEVEN_API_KEY",
+      "description": "ElevenLabs API key for high-fidelity neural voice streaming (optional). Get it from https://elevenlabs.io/app/settings/api-keys.",
+      "requiredAtBoot": false
+    }
+  ]
+}

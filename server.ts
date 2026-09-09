@@ -11,8 +11,6 @@ const grammarTitles = new Set(GRAMMAR_TOPICS.map(t => t.title));
 const topicPrefix = "A gothic, mystical background representing the topic ";
 const grammarPrefix = "A gothic, mystical background representing the grammar topic ";
 
-import { GRAMMAR_TOPICS } from "./src/data.js";
-
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
   definitionEs: string;
