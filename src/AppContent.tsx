@@ -39,15 +39,28 @@ const AppLayout: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-black text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
+      className="min-h-screen bg-slate-950 text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
       style={{
         backgroundImage: bgUrl ? `url(${bgUrl})` : 'none',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
-        backgroundAttachment: 'fixed'
+        backgroundAttachment: 'fixed',
+        backgroundColor: '#020b16'
       }}
     >
       <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-slate-950/90 via-sky-950/70 to-black/90" />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage: "url('/deep-ocean-watermark.jpeg')",
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            backgroundRepeat: 'no-repeat',
+            mixBlendMode: 'screen',
+            filter: 'saturate(0.9) contrast(1.1) brightness(0.7) blur(0.3px)'
+          }}
+        />
         {bubbles.map(bubble => {
           let color = 'rgba(34, 211, 238, 0.25)'; // neon cyan
           if (bubble.type === 1) color = 'rgba(16, 185, 129, 0.22)'; // neon emerald
