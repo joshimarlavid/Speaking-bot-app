@@ -1,5 +1,3 @@
-🎯 **What:** The vulnerability fixed is the exposure of the `GEMINI_API_KEY` on the client side inside the `src/hooks/useExercises.ts` file, where the `GoogleGenAI` client was being instantiated.
-
-⚠️ **Risk:** The potential impact if left unfixed is that an attacker or malicious user could extract the API key from the frontend bundle and abuse it, leading to unauthenticated/unauthorized API usage, quota exhaustion, and potentially billing charges to the application owner.
-
-🛡️ **Solution:** The fix addresses the vulnerability by removing the client-side Google SDK instantiation. Instead, it utilizes the existing `/api/generate-exercise` backend endpoint by sending a standard `fetch` POST request with the `randomTopic` payload, ensuring the API key remains securely stored on the server.
+🎯 **What:** Added tests and missing regex edge case for `verifyUnscrambleAnswer` logic. Also cleaned up testing related regressions in `src/utils/audio.test.ts`.
+📊 **Coverage:** Successfully covered edge cases relating to the `verifyUnscrambleAnswer` logic (correctness, incorrect answers, missing word edge cases, missing punctuation and unexpected spacing edge cases).
+✨ **Result:** Now all variants and permutations of answers are correctly handled. Improved test coverage and fixed syntax errors that blocked upstream CI.

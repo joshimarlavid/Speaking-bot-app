@@ -94,7 +94,7 @@ export const useExercises = () => {
 
   const verifyScribeAnswer = useCallback(() => {
     if (!currentExercise || selectedAnswer !== null) return;
-    const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").trim();
     const correct = currentExercise.options[currentExercise.answer];
 
     if (norm(spellInput) === norm(correct)) {
@@ -129,7 +129,7 @@ export const useExercises = () => {
 
   const verifyUnscrambleAnswer = useCallback(() => {
     if (!currentExercise || selectedAnswer !== null) return;
-    const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const norm = (s: string) => s.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "").trim();
 
     const correctWord = currentExercise.options[currentExercise.answer];
     const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
