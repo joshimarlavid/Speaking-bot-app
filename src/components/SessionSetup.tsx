@@ -36,7 +36,6 @@ export const SessionSetup: React.FC<{
             <button
               onClick={() => { playClick(); setMode('student'); }}
               disabled={isSessionConnected || isSessionConnecting}
-              className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'student' ? 'bg-blue-500 text-black shadow-[0_0_[...]
             >
               Student
             </button>
