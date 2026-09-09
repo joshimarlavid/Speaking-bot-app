@@ -6,7 +6,6 @@ import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
@@ -305,10 +304,14 @@ export default function App() {
     const defaultTopicId = role ? role.topicId : null;
     
     const saved = localStorage.getItem('linguaRole_topic');
-    if (saved && TOPICS.find(t => t.id === saved)) {
-      return TOPICS.find(t => t.id === saved)!;
-    } else if (defaultTopicId && TOPICS.find(t => t.id === defaultTopicId)) {
-      return TOPICS.find(t => t.id === defaultTopicId)!;
+    if (saved) {
+      const foundSaved = TOPICS.find(t => t.id === saved);
+      if (foundSaved) return foundSaved;
+    }
+
+    if (defaultTopicId) {
+      const foundDefault = TOPICS.find(t => t.id === defaultTopicId);
+      if (foundDefault) return foundDefault;
     }
     return TOPICS[0];
   });
