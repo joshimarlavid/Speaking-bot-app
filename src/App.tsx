@@ -4,8 +4,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { Mic, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
@@ -497,8 +495,6 @@ export default function App() {
             role: "Gothic Exercise Tutor",
             date: new Date().toISOString(),
             topic: currentExercise.topic,
-            comments: `Successfully mastered Incantation order for sentence: "${currentExercise.question.replace(/_____+|____|___/g, currentExercise.options[currentExercise.answer])}"`,
-
             comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
             ratingAI: 5,
             ratingTopic: 5
@@ -835,19 +831,51 @@ export default function App() {
     });
   }, [baseFilteredRoles, roleSearchQuery, selectedLevelFilter, getRoleLevel]);
 
-  const activeUserTranscript = useMemo(() => {
-    if (elevenLabsMode) {
-      return elevenMessages.filter(m => m.role === 'user').map(m => m.text).join(' ');
-    }
-    return userTranscript;
-  }, [elevenLabsMode, elevenMessages, userTranscript]);
+  const transcriptCache = useRef({
+    messages: [] as { role: 'user' | 'model'; text: string }[],
+    userTranscript: '',
+    aiTranscript: '',
+  });
 
-  const activeAiTranscript = useMemo(() => {
-    if (elevenLabsMode) {
-      return elevenMessages.filter(m => m.role === 'model').map(m => m.text).join('\n\n');
+  const { activeUserTranscript, activeAiTranscript } = useMemo(() => {
+    if (!elevenLabsMode) {
+      return { activeUserTranscript: userTranscript, activeAiTranscript: aiTranscript };
     }
-    return aiTranscript;
-  }, [elevenLabsMode, elevenMessages, aiTranscript]);
+
+    let cache = transcriptCache.current;
+    let nextUserStr = cache.userTranscript;
+    let nextAiStr = cache.aiTranscript;
+
+    if (elevenMessages.length === 0) {
+      nextUserStr = '';
+      nextAiStr = '';
+    } else if (
+      elevenMessages.length < cache.messages.length ||
+      elevenMessages[0] !== cache.messages[0]
+    ) {
+      // Full recalculation needed (e.g. state reset or overwritten)
+      nextUserStr = elevenMessages.filter(m => m.role === 'user').map(m => m.text).join(' ');
+      nextAiStr = elevenMessages.filter(m => m.role === 'model').map(m => m.text).join('\n\n');
+    } else {
+      // Incremental appending
+      for (let j = cache.messages.length; j < elevenMessages.length; j++) {
+        const m = elevenMessages[j];
+        if (m.role === 'user') {
+          nextUserStr = nextUserStr ? nextUserStr + ' ' + m.text : m.text;
+        } else {
+          nextAiStr = nextAiStr ? nextAiStr + '\n\n' + m.text : m.text;
+        }
+      }
+    }
+
+    transcriptCache.current = {
+      messages: elevenMessages,
+      userTranscript: nextUserStr,
+      aiTranscript: nextAiStr,
+    };
+
+    return { activeUserTranscript: nextUserStr, activeAiTranscript: nextAiStr };
+  }, [elevenLabsMode, elevenMessages, userTranscript, aiTranscript]);
 
   const handleElevenMessage = async (text: string) => {
     if (!text.trim()) return;
