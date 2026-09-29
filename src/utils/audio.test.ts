@@ -8,6 +8,7 @@ describe('audio utilities', () => {
   let mockConsoleWarn: any;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.resetModules();
 
     // Create mock nodes
@@ -59,9 +60,61 @@ describe('audio utilities', () => {
     mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
+  describe('playClick', () => {
+    it('should play a click sound using AudioContext', async () => {
+      const { playClick } = await import('./audio');
+
+      playClick();
+
+      expect(mockConsoleWarn).not.toHaveBeenCalled();
+      expect(mockAudioContext.createOscillator).toHaveBeenCalled();
+      expect(mockAudioContext.createGain).toHaveBeenCalled();
+      expect(mockOscillator.start).toHaveBeenCalledWith(1.0);
+      expect(mockOscillator.stop).toHaveBeenCalledWith(1.1);
+      expect(mockGainNode.connect).toHaveBeenCalledWith(mockAudioContext.destination);
+    });
+
+    it('should handle errors gracefully', async () => {
+      mockAudioContext.createOscillator.mockImplementationOnce(() => {
+        throw new Error('Audio click failure');
+      });
+      const { playClick } = await import('./audio');
+
+      playClick();
+
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio click failed to play:', expect.any(Error));
+    });
+  });
+
+  describe('playStart', () => {
+    it('should play a start sound using AudioContext', async () => {
+      const { playStart } = await import('./audio');
+
+      playStart();
+
+      expect(mockConsoleWarn).not.toHaveBeenCalled();
+      expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(2);
+      expect(mockAudioContext.createGain).toHaveBeenCalledTimes(1);
+      expect(mockAudioContext.createBiquadFilter).toHaveBeenCalledTimes(1);
+      expect(mockOscillator.start).toHaveBeenCalledWith(1.0);
+      expect(mockOscillator.stop).toHaveBeenCalledWith(1.95);
+      expect(mockGainNode.connect).toHaveBeenCalledWith(mockAudioContext.destination);
+    });
+
+    it('should handle setup failure gracefully in playStart', async () => {
+      mockAudioContext.createOscillator.mockImplementationOnce(() => {
+        throw new Error('Audio setup failed');
+      });
+      const { playStart } = await import('./audio');
+
+      playStart();
+
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(Error));
+    });
+  });
+
   describe('playReward', () => {
     it('should play a reward sound using AudioContext', async () => {
-      // Force a fresh import so it uses the mocked window
       const { playReward } = await import('./audio');
 
       playReward();
@@ -76,26 +129,11 @@ describe('audio utilities', () => {
     });
 
     it('should handle errors gracefully', async () => {
-       vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
-       const { playReward } = await import('./audio');
-       playReward();
-       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
-    });
-
-    it('should handle Audio setup failed gracefully in playStart', async () => {
-      mockAudioContext.createOscillator.mockImplementationOnce(() => {
-        throw new Error('Audio setup failed');
-      });
-      const { playStart } = await import('./audio');
-      playStart();
-      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(Error));
-    });
-
-    it('should handle mock error gracefully in playReward after resetModules', async () => {
       vi.stubGlobal('window', { AudioContext: vi.fn(() => { throw new Error('Mock error'); }) });
-      vi.resetModules();
       const { playReward } = await import('./audio');
+
       playReward();
+
       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
     });
   });
