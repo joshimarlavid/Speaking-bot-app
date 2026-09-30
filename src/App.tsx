@@ -710,12 +710,12 @@ export default function App() {
   const [elevenWarning, setElevenWarning] = useState<string | null>(null);
 
   const ELEVENLABS_VOICES: Record<string, string> = {
-    "Puck": "21m00Tcm4TlvDq8ikWAM",      // Rachel
-    "Zephyr": "29vD33N1CtxCmqQRPOHJ",    // Drew
-    "Charon": "2EiwXtPIg78QI4pfI8yw",    // Clyde
-    "Fenrir": "TX38kiF68H5Ztx86Xmby",    // Mitch
-    "Kore": "EXAVITg3911n7EtC453S",      // Bella
-    "Aoede": "AZnzlk1XvdvUeBnXmlld",     // Dom
+    "Puck": "EXAVITQu4vr4xnSDxMaL",      // Sarah
+    "Zephyr": "TX3LPaxmHKxFdv7VOQHJ",    // Liam
+    "Charon": "pNInz6obpgDQGcFmaJgB",    // Adam
+    "Fenrir": "JBFqnCBsd6RMkjVDRZzb",    // George
+    "Kore": "cgSgspJ2msm6clMCkdW9",      // Jessica
+    "Aoede": "pFZP5JQG7iQjIQuC4Bku",     // Lily
   };
 
   const isSessionConnected = isConnected || elevenLabsConnected;
@@ -810,7 +810,7 @@ export default function App() {
         body: JSON.stringify({
           user_input: text,
           persona_prompt: introPrompt,
-          voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "21m00Tcm4TlvDq8ikWAM"
+          voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "EXAVITQu4vr4xnSDxMaL"
         })
       });
 
@@ -1054,7 +1054,7 @@ export default function App() {
           body: JSON.stringify({
             user_input: "Hi! Greet me to begin our conversation.",
             persona_prompt: introPrompt,
-            voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "21m00Tcm4TlvDq8ikWAM"
+            voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "EXAVITQu4vr4xnSDxMaL"
           })
         });
 

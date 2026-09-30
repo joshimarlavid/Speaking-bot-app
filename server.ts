@@ -1,3 +1,6 @@
+import dotenv from "dotenv";
+dotenv.config();
+
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
@@ -369,7 +372,7 @@ async function startServer() {
       Do not wrap the response in \`\`\`json or any other formatting.`;
 
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash',
+        model: 'gemini-2.5-flash',
         contents: "Generate exercise",
         config: {
           systemInstruction: prompt,
@@ -454,7 +457,7 @@ async function startServer() {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
           const geminiResponse = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: "gemini-2.5-flash",
             contents: `Usuario: ${user_input}\nRespuesta:`,
             config: {
               systemInstruction: persona_prompt
@@ -472,7 +475,7 @@ async function startServer() {
       res.setHeader("x-response-text", encodeURIComponent(text_response));
 
       const elevenApiKey = process.env.ELEVEN_API_KEY;
-      const defaultVoiceId = "21m00Tcm4TlvDq8ikWAM"; // Default Rachel voice ID
+      const defaultVoiceId = "EXAVITQu4vr4xnSDxMaL"; // Default Sarah voice ID (supported across all tiers)
       const isValidVoiceId =
         typeof voice_id === "string" &&
         /^[A-Za-z0-9]{20,64}$/.test(voice_id);
@@ -515,6 +518,17 @@ async function startServer() {
         });
         return;
       }
+
+      // Extract raw response headers for billing and tracing
+      const charCost = elevenResponse.headers.get("character-cost");
+      const requestId = elevenResponse.headers.get("request-id");
+      const traceId = elevenResponse.headers.get("x-trace-id") || elevenResponse.headers.get("trace-id");
+
+      if (charCost) res.setHeader("x-character-cost", charCost);
+      if (requestId) res.setHeader("x-request-id", requestId);
+      if (traceId) res.setHeader("x-trace-id", traceId);
+
+      console.log(`[ElevenLabs] TTS Generated successfully: character_cost=${charCost || 'N/A'}, request_id=${requestId || 'N/A'}, trace_id=${traceId || 'N/A'}`);
 
       // Stream the audio back to the frontend
       res.setHeader("Content-Type", "audio/mpeg");
@@ -613,7 +627,7 @@ Keep the tone encouraging, inspiring, and professional.`;
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: "Provide feedback",
           config: {
             systemInstruction: systemPrompt
@@ -671,7 +685,7 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
         const geminiResponse = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
+          model: "gemini-2.5-flash",
           contents: "Generate flashcard",
           config: {
             systemInstruction: systemPrompt,
