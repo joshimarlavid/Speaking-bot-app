@@ -5,7 +5,7 @@ async function run() {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3.1-flash-lite-image',
       contents: "1950s cigarette advertisement aesthetic, a glowing green emerald smoke cloud shaped like healthy lungs, high-tech microscopic nanobots repairing tissue, vintage luxury magazine texture, cynical and futuristic."
     });
     

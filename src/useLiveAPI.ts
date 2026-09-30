@@ -30,7 +30,7 @@ export function useLiveAPI() {
 
     try {
             const ai = new GoogleGenAI({
-        apiKey: 'lingua-role-secret-token', // Dummy key to pass validation; actual key is appended by proxy
+        apiKey: 'proxy', // Dummy key to pass validation; actual key is appended by proxy
         httpOptions: {
           baseUrl: window.location.protocol + '//' + window.location.host + '/api/gemini'
         }
@@ -303,7 +303,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 source.start(nextPlayTimeRef.current);
                 nextPlayTimeRef.current += audioBuffer.duration;
               } catch (e) {
-                // Ignore audio decoding/playback errors for individual chunks
+                console.error("Error playing audio chunk", e);
               }
             }
             }

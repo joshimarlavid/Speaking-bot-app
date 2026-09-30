@@ -1,17 +1,13 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { safeGetFeedbackLogs } from "./utils/storage";
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, Dices, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
+import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
 import { jsPDF } from 'jspdf';
-export const premiumRoleIds = new Set(ROLES.slice(5).map(r => r.id));
-
 
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
@@ -39,18 +35,6 @@ export interface AppTheme {
   svgPrimary: string;        
   svgSecondary: string;      
 }
-
-const SEARCH_INPUT_CLASSES = [
-  // Layout & Spacing
-  "w-full pl-11 pr-10 py-3 rounded-xl",
-  // Colors & Typography
-  "bg-zinc-950/80 border border-zinc-850 text-blue-200 text-sm font-medium",
-  // Interaction & States
-  "outline-none transition-all",
-  "focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500",
-  "placeholder-blue-500/25",
-  "disabled:opacity-50"
-].join(" ");
 
 export const THEMES: Record<MenuMode, AppTheme> = {
   student: {
@@ -267,7 +251,6 @@ const GothicSkullFlowerFrame: React.FC<{
 };
 
 export default function App() {
-  const [feedbackLogs, setFeedbackLogs] = useState<any[]>([]);
   const [mode, setMode] = useState<MenuMode>(() => {
     return (localStorage.getItem('linguaRole_mode') as MenuMode) || 'student';
   });
@@ -304,14 +287,10 @@ export default function App() {
     const defaultTopicId = role ? role.topicId : null;
     
     const saved = localStorage.getItem('linguaRole_topic');
-    if (saved) {
-      const foundSaved = TOPICS.find(t => t.id === saved);
-      if (foundSaved) return foundSaved;
-    }
-
-    if (defaultTopicId) {
-      const foundDefault = TOPICS.find(t => t.id === defaultTopicId);
-      if (foundDefault) return foundDefault;
+    if (saved && TOPICS.find(t => t.id === saved)) {
+      return TOPICS.find(t => t.id === saved)!;
+    } else if (defaultTopicId && TOPICS.find(t => t.id === defaultTopicId)) {
+      return TOPICS.find(t => t.id === defaultTopicId)!;
     }
     return TOPICS[0];
   });
@@ -343,9 +322,9 @@ export default function App() {
     if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
     try {
       const correctWord = currentExercise.options[currentExercise.answer];
-      const unscrambleFullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
-      const words = unscrambleFullSentence.match(/\S+/g) || [];
-      return { unscrambleCorrectWords: words, unscrambleFullSentence: unscrambleFullSentence };
+      const fullSentence = currentExercise.question.replace(/_____+|____|___/g, correctWord);
+      const words = fullSentence.split(/\s+/).filter(Boolean);
+      return { unscrambleCorrectWords: words, unscrambleFullSentence: fullSentence };
     } catch (e) {
       console.error("Failed to parse exercise text", e);
       return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
@@ -404,20 +383,8 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => {
-          const newLogs = [...prev, {
-            role: "Gothic Exercise Tutor",
-            date: new Date().toISOString(),
-            topic: currentExercise.topic,
-            comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
-            ratingAI: 5,
-            ratingTopic: 5
-          }];
-          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
-          return newLogs;
-        });
-        const newFeedbackLogs = [...feedbackLogs];
-        newFeedbackLogs.push({
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
@@ -425,7 +392,7 @@ export default function App() {
           ratingAI: 5,
           ratingTopic: 5
         });
-        setFeedbackLogs(newFeedbackLogs);
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -448,20 +415,8 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => {
-          const newLogs = [...prev, {
-            role: "Gothic Exercise Tutor",
-            date: new Date().toISOString(),
-            topic: currentExercise.topic,
-            comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
-            ratingAI: 5,
-            ratingTopic: 5
-          }];
-          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
-          return newLogs;
-        });
-        const newFeedbackLogs = [...feedbackLogs];
-        newFeedbackLogs.push({
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
@@ -469,7 +424,7 @@ export default function App() {
           ratingAI: 5,
           ratingTopic: 5
         });
-        setFeedbackLogs(newFeedbackLogs);
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -495,20 +450,8 @@ export default function App() {
       playReward();
 
       try {
-        setFeedbackLogs(prev => {
-          const newLogs = [...prev, {
-            role: "Gothic Exercise Tutor",
-            date: new Date().toISOString(),
-            topic: currentExercise.topic,
-            comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
-            ratingAI: 5,
-            ratingTopic: 5
-          }];
-          localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
-          return newLogs;
-        });
-        const newFeedbackLogs = [...feedbackLogs];
-        newFeedbackLogs.push({
+        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+        feedbackLogs.push({
           role: "Gothic Exercise Tutor",
           date: new Date().toISOString(),
           topic: currentExercise.topic,
@@ -516,7 +459,7 @@ export default function App() {
           ratingAI: 5,
           ratingTopic: 5
         });
-        setFeedbackLogs(newFeedbackLogs);
+        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
       } catch (e) {
         console.error(e);
       }
@@ -539,7 +482,7 @@ export default function App() {
       const lvl = Math.floor(runes / 1000);
       let logs: any[] = [];
       try {
-        logs = feedbackLogs;
+        logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
       } catch (e) {
         console.error("Local storage error:", e);
       }
@@ -836,51 +779,19 @@ export default function App() {
     });
   }, [baseFilteredRoles, roleSearchQuery, selectedLevelFilter, getRoleLevel]);
 
-  const transcriptCache = useRef({
-    messages: [] as { role: 'user' | 'model'; text: string }[],
-    userTranscript: '',
-    aiTranscript: '',
-  });
-
-  const { activeUserTranscript, activeAiTranscript } = useMemo(() => {
-    if (!elevenLabsMode) {
-      return { activeUserTranscript: userTranscript, activeAiTranscript: aiTranscript };
+  const activeUserTranscript = useMemo(() => {
+    if (elevenLabsMode) {
+      return elevenMessages.filter(m => m.role === 'user').map(m => m.text).join(' ');
     }
+    return userTranscript;
+  }, [elevenLabsMode, elevenMessages, userTranscript]);
 
-    let cache = transcriptCache.current;
-    let nextUserStr = cache.userTranscript;
-    let nextAiStr = cache.aiTranscript;
-
-    if (elevenMessages.length === 0) {
-      nextUserStr = '';
-      nextAiStr = '';
-    } else if (
-      elevenMessages.length < cache.messages.length ||
-      elevenMessages[0] !== cache.messages[0]
-    ) {
-      // Full recalculation needed (e.g. state reset or overwritten)
-      nextUserStr = elevenMessages.filter(m => m.role === 'user').map(m => m.text).join(' ');
-      nextAiStr = elevenMessages.filter(m => m.role === 'model').map(m => m.text).join('\n\n');
-    } else {
-      // Incremental appending
-      for (let j = cache.messages.length; j < elevenMessages.length; j++) {
-        const m = elevenMessages[j];
-        if (m.role === 'user') {
-          nextUserStr = nextUserStr ? nextUserStr + ' ' + m.text : m.text;
-        } else {
-          nextAiStr = nextAiStr ? nextAiStr + '\n\n' + m.text : m.text;
-        }
-      }
+  const activeAiTranscript = useMemo(() => {
+    if (elevenLabsMode) {
+      return elevenMessages.filter(m => m.role === 'model').map(m => m.text).join('\n\n');
     }
-
-    transcriptCache.current = {
-      messages: elevenMessages,
-      userTranscript: nextUserStr,
-      aiTranscript: nextAiStr,
-    };
-
-    return { activeUserTranscript: nextUserStr, activeAiTranscript: nextAiStr };
-  }, [elevenLabsMode, elevenMessages, userTranscript, aiTranscript]);
+    return aiTranscript;
+  }, [elevenLabsMode, elevenMessages, aiTranscript]);
 
   const handleElevenMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -1062,13 +973,6 @@ export default function App() {
   }, []);
 
   const [challengeCompleted, setChallengeCompleted] = useState(false);
-  const [feedbackLogs2, setFeedbackLogs2] = useState<any[]>(() => {
-    try {
-      return safeGetFeedbackLogs();
-    } catch {
-      return [];
-    }
-  });
 
   useEffect(() => {
     if (dailyChallenge && activeUserTranscript && !challengeCompleted) {
@@ -1125,10 +1029,6 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('linguaRole_role', selectedRole.id);
   }, [selectedRole]);
-
-  useEffect(() => {
-    localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
-  }, [feedbackLogs]);
 
   const rollDice = () => {
     playClick();
@@ -1293,13 +1193,8 @@ export default function App() {
       aiReport: aiFeedbackReport
     };
     
-    setFeedbackLogs(prev => {
-      const newLogs = [...prev, feedback];
-      localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
-      return newLogs;
-    });
-    const existing = feedbackLogs;
-    setFeedbackLogs([...existing, feedback]);
+    const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+    localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
     
     setShowFeedback(false);
     setRatingAI(0);
@@ -1312,7 +1207,7 @@ export default function App() {
     <div 
       className="min-h-screen bg-black text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
       style={{
-        backgroundImage: bgUrl ? `url(${bgUrl})` : 'none',
+        backgroundImage: bgUrl ? `url(${bgUrl})` : 'url(https://images.unsplash.com/photo-1551244072-5d12893278ab?q=80&w=1920&auto=format&fit=crop)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed'
@@ -1642,7 +1537,7 @@ export default function App() {
                             value={roleSearchQuery}
                             onChange={(e) => setRoleSearchQuery(e.target.value)}
                             disabled={isSessionConnected || isSessionConnecting}
-                            className={SEARCH_INPUT_CLASSES}
+                            className="w-full bg-zinc-950/80 border border-zinc-850 text-blue-200 rounded-xl pl-11 pr-10 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all placeholder-blue-500/25 disabled:opacity-50 font-medium"
                           />
                           {roleSearchQuery && (
                             <button 
@@ -1693,7 +1588,7 @@ export default function App() {
                         ) : (
                           finalFilteredRoles.map((role) => {
                             const isSelected = selectedRole.id === role.id;
-                            const isRolePremium = mode !== 'beginner' && premiumRoleIds.has(role.id);
+                            const isRolePremium = mode !== 'beginner' && ROLES.findIndex(r => r.id === role.id) >= 5;
                             const displayLevel = getRoleLevel(role.id, role.name);
                             
                             // Color scheme mapping
@@ -2106,10 +2001,10 @@ export default function App() {
                             onClick={() => {
                               playClick();
                               const correctWord = currentExercise.options[currentExercise.answer];
-                              const unscrambleFullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
+                              const fullSentence = currentExercise.question.replace(/_____+|____/g, correctWord);
                               if (window.speechSynthesis) {
                                 window.speechSynthesis.cancel();
-                                const utterance = new SpeechSynthesisUtterance(unscrambleFullSentence);
+                                const utterance = new SpeechSynthesisUtterance(fullSentence);
                                 utterance.lang = 'en-US';
                                 utterance.rate = 0.85;
                                 utterance.pitch = 0.95;
@@ -2449,7 +2344,7 @@ export default function App() {
                       </div>
                       <div className={`p-4 rounded-xl border flex items-center gap-3 transition-opacity ${(() => {
                         try {
-                          return feedbackLogs.length > 0;
+                          return JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]').length > 0;
                         } catch {
                           return false;
                         }
@@ -2472,7 +2367,7 @@ export default function App() {
                     <div className="space-y-3 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar">
                       {(() => {
                         try {
-                          const logs = feedbackLogs;
+                          const logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
                           if (logs.length === 0) {
                             return (
                               <div className="bg-red-950/10 border border-red-950/30 rounded-xl p-6 text-center text-zinc-400">
@@ -2499,10 +2394,10 @@ export default function App() {
                                 <div className="flex justify-between items-center text-xs text-red-300">
                                   <div className="flex gap-4">
                                     <span className="flex items-center gap-1">
-                                      AI: {'★'.repeat(log.ratingAI || 0)}
+                                      AI: {Array.from({ length: log.ratingAI || 0 }).map(() => '★').join('')}
                                     </span>
                                     <span className="flex items-center gap-1">
-                                      Topic: {'★'.repeat(log.ratingTopic || 0)}
+                                      Topic: {Array.from({ length: log.ratingTopic || 0 }).map(() => '★').join('')}
                                     </span>
                                   </div>
                                   {log.aiReport && (
@@ -2683,7 +2578,7 @@ export default function App() {
               <div className="mt-8 pt-6 border-t border-blue-900/50">
                 {!isSessionConnected ? (
                   <>
-                    {mode === 'student' && premiumRoleIds.has(selectedRole.id) && !isPremium ? (
+                    {mode === 'student' && ROLES.findIndex(r => r.id === selectedRole.id) >= 5 && !isPremium ? (
                       <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-6 text-center">
                         <Lock className="mx-auto mb-3 text-amber-500" size={32} />
                         <h3 className="text-amber-400 font-bold tracking-widest uppercase mb-2">Premium Role Locked</h3>
@@ -3034,13 +2929,8 @@ export default function App() {
                         comments: feedbackText || "Self-study session completed.",
                         aiReport: aiFeedbackReport
                       };
-                      setFeedbackLogs(prev => {
-                        const newLogs = [...prev, feedback];
-                        localStorage.setItem('linguaRole_feedback', JSON.stringify(newLogs));
-                        return newLogs;
-                      });
-                      const existing = feedbackLogs;
-                      setFeedbackLogs([...existing, feedback]);
+                      const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
+                      localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
                       
                       setShowFeedback(false);
                       setRatingAI(0);
