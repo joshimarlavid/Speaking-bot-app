@@ -873,8 +873,15 @@ export default function App() {
       };
 
       recognition.onerror = (e: any) => {
-        console.error("Speech recognition error:", e);
         setIsRecording(false);
+        const errType = e?.error;
+        if (errType === 'not-allowed') {
+          setElevenWarning("Microphone permission was not granted. You can type directly in the input box below.");
+        } else if (errType === 'no-speech') {
+          // Normal timeout when silence detected
+        } else if (errType !== 'aborted') {
+          setElevenWarning("Voice recognition ended. You can speak again or type your message.");
+        }
       };
 
       recognition.onend = () => {
@@ -890,8 +897,7 @@ export default function App() {
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch (e) {
-      console.error(e);
+    } catch {
       setIsRecording(false);
     }
   };
@@ -1207,7 +1213,7 @@ export default function App() {
     <div 
       className="min-h-screen bg-black text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
       style={{
-        backgroundImage: bgUrl ? `url(${bgUrl})` : 'url(https://images.unsplash.com/photo-1551244072-5d12893278ab?q=80&w=1920&auto=format&fit=crop)',
+        backgroundImage: bgUrl ? `url(${bgUrl})` : 'url(/deep-sea-bg.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed'

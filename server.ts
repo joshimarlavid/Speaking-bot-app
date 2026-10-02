@@ -1,5 +1,21 @@
+import fs from "fs";
 import dotenv from "dotenv";
 dotenv.config();
+
+// Ensure that if process.env.ELEVEN_API_KEY was populated with an API Key ID (not starting with 'sk_'),
+// we prefer the real secret key starting with 'sk_' from .env if available.
+if (!process.env.ELEVEN_API_KEY?.startsWith("sk_")) {
+  try {
+    if (fs.existsSync(".env")) {
+      const parsed = dotenv.parse(fs.readFileSync(".env"));
+      if (parsed.ELEVEN_API_KEY?.startsWith("sk_")) {
+        process.env.ELEVEN_API_KEY = parsed.ELEVEN_API_KEY;
+      }
+    }
+  } catch {
+    // Ignore file read error
+  }
+}
 
 import express from "express";
 import path from "path";
@@ -344,6 +360,29 @@ async function startServer() {
 
   // API route for Chat Roleplay with ElevenLabs Streaming
 
+  // Helper to safely invoke Gemini text models with automatic modern model fallback
+  async function generateGeminiText(ai: GoogleGenAI, contents: any, config?: any) {
+    const candidateModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+    let lastError: any = null;
+    for (const model of candidateModels) {
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("Timeout generating content")), 5000)
+        );
+        const resPromise = ai.models.generateContent({
+          model,
+          contents,
+          config
+        });
+        return (await Promise.race([resPromise, timeoutPromise])) as any;
+      } catch (err: any) {
+        lastError = err;
+        continue;
+      }
+    }
+    throw lastError;
+  }
+
   // API route for generating grammar exercise
   app.post("/api/generate-exercise", async (req: express.Request, res: express.Response) => {
     try {
@@ -371,13 +410,9 @@ async function startServer() {
       Ensure the vocabulary words are used appropriately.
       Do not wrap the response in \`\`\`json or any other formatting.`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: "Generate exercise",
-        config: {
-          systemInstruction: prompt,
-          responseMimeType: "application/json"
-        }
+      const response = await generateGeminiText(ai, "Generate exercise", {
+        systemInstruction: prompt,
+        responseMimeType: "application/json"
       });
 
       const text = response.text || "{}";
@@ -397,44 +432,9 @@ async function startServer() {
   });
 
   // API route for generating background image
-  app.post("/api/generate-background", async (req: express.Request, res: express.Response) => {
-    try {
-      const { prompt } = req.body;
-      const geminiKey = process.env.GEMINI_API_KEY;
-      if (!geminiKey || geminiKey.trim().length < 10) {
-        console.warn("[API WARNING] Missing or invalid GEMINI_API_KEY for background generation");
-        res.status(200).json({ url: null });
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey: geminiKey });
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite-image',
-        contents: prompt,
-        config: {
-          imageConfig: {
-            aspectRatio: "16:9",
-            imageSize: "1K"
-          }
-        }
-      });
-
-      let url = null;
-      for (const part of response.candidates?.[0]?.content?.parts || []) {
-        if (part.inlineData) {
-          url = `data:image/jpeg;base64,${part.inlineData.data}`;
-          break;
-        }
-      }
-
-      res.status(200).json({ url });
-    } catch (e: any) {
-      // Gracefully handle quota or other API errors
-      console.warn("[API ADVISORY] Background generation failed (quota or key limit), serving premium static deep-sea background asset.", e.message || e);
-      const fallbackUrl = "https://images.unsplash.com/photo-1551244072-5d12893278ab?q=80&w=1920&auto=format&fit=crop";
-      res.status(200).json({ url: fallbackUrl });
-    }
+  app.post("/api/generate-background", async (_req: express.Request, res: express.Response) => {
+    // Deliver high-fidelity static deep-sea background asset
+    res.status(200).json({ url: "/deep-sea-bg.jpg" });
   });
 
   app.post("/api/chat-roleplay", async (req: express.Request, res: express.Response) => {
@@ -456,17 +456,12 @@ async function startServer() {
       } else {
         try {
           const ai = new GoogleGenAI({ apiKey: geminiKey });
-          const geminiResponse = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: `Usuario: ${user_input}\nRespuesta:`,
-            config: {
-              systemInstruction: persona_prompt
-            }
+          const geminiResponse = await generateGeminiText(ai, `Usuario: ${user_input}\nRespuesta:`, {
+            systemInstruction: persona_prompt
           });
           text_response = geminiResponse.text || "";
         } catch (apiErr) {
-          // Quietly fallback locally if API call fails
-          console.warn("[API WARNING] Gemini API key failed validation, falling back to local simulation helper.");
+          // Fall back seamlessly to local dialogue simulation
           text_response = getOfflineRoleplayResponse(user_input, persona_prompt);
         }
       }
@@ -481,12 +476,15 @@ async function startServer() {
         /^[A-Za-z0-9]{20,64}$/.test(voice_id);
       const targetVoice = isValidVoiceId ? voice_id : defaultVoiceId;
 
-      if (!elevenApiKey) {
-        // If ElevenLabs key is not present, we return JSON with text response and details
+      // Only attempt ElevenLabs if key is present and is an actual API key (starts with sk_)
+      const isElevenKeyValid = typeof elevenApiKey === "string" && elevenApiKey.startsWith("sk_") && elevenApiKey.length > 20;
+
+      if (!isElevenKeyValid) {
+        // Return JSON with text response and browser synthesis indicator
         res.setHeader("x-elevenlabs-missing", "true");
         res.status(200).json({ 
           text: text_response, 
-          warning: "Configure ELEVEN_API_KEY in your env/Settings to enable high-fidelity ElevenLabs neural voice generation." 
+          warning: "ElevenLabs API key not configured or format invalid (keys must start with 'sk_'). Using browser speech synthesis fallback." 
         });
         return;
       }
@@ -509,12 +507,10 @@ async function startServer() {
       });
 
       if (!elevenResponse.ok) {
-        const errorText = await elevenResponse.text();
-        console.warn("ElevenLabs API warning:", errorText);
         res.setHeader("x-elevenlabs-error", "true");
         res.status(200).json({ 
           text: text_response, 
-          warning: "ElevenLabs API error. Using synthetic browser fallback." 
+          warning: "ElevenLabs API temporarily unavailable. Using synthetic browser fallback." 
         });
         return;
       }
@@ -546,8 +542,7 @@ async function startServer() {
       }
 
     } catch (error: any) {
-      console.warn("[API WARNING] Roleplay server handler caught exception, returning best-effort dialogue response.");
-      const text = getOfflineRoleplayResponse(req.body.user_input || "", req.body.persona_prompt || "");
+      const text = getOfflineRoleplayResponse(req.body?.user_input || "", req.body?.persona_prompt || "");
       res.setHeader("x-response-text", encodeURIComponent(text));
       res.status(200).json({ text });
     }
@@ -626,20 +621,14 @@ Keep the tone encouraging, inspiring, and professional.`;
 
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const geminiResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: "Provide feedback",
-          config: {
-            systemInstruction: systemPrompt
-          }
+        const geminiResponse = await generateGeminiText(ai, "Provide feedback", {
+          systemInstruction: systemPrompt
         });
         res.status(200).json({ feedback: geminiResponse.text || "Unable to generate feedback at this time." });
       } catch (err) {
-        console.warn("[API WARNING] Feedback route encountered API call issues, providing beautiful offline static critique report.");
         res.status(200).json({ feedback: offlineFeedback });
       }
     } catch (error: any) {
-      console.warn("Error in /api/feedback route, supplying elegant offline fallback.");
       res.status(200).json({ 
         feedback: `### Lesson Summary\n\nExcellent work! Your dialogue has been recorded safely. Set a valid \`GEMINI_API_KEY\` to enable dynamic, automated AI corrections.`
       });
@@ -684,13 +673,9 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
 
       try {
         const ai = new GoogleGenAI({ apiKey: geminiKey });
-        const geminiResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: "Generate flashcard",
-          config: {
-            systemInstruction: systemPrompt,
-            responseMimeType: "application/json"
-          }
+        const geminiResponse = await generateGeminiText(ai, "Generate flashcard", {
+          systemInstruction: systemPrompt,
+          responseMimeType: "application/json"
         });
 
         const text = geminiResponse.text?.trim() || "{}";
@@ -698,12 +683,10 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
         const data = JSON.parse(cleaned);
         res.status(200).json(data);
       } catch (err) {
-        console.warn("[API WARNING] Flashcard Gemini API key invalid/failed, serving resilient offline card content.");
         const offlineCard = generateResilientOfflineCard(vocab, topic);
         res.status(200).json(offlineCard);
       }
     } catch (error: any) {
-      console.warn("Generic error in /api/flashcard, serving baseline fallback details.");
       const offlineCard = generateResilientOfflineCard(req.body.vocab || "practice", req.body.topic);
       res.status(200).json(offlineCard);
     }

@@ -41,7 +41,7 @@ const AppLayout: React.FC = () => {
     <div
       className="min-h-screen bg-black text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
       style={{
-        backgroundImage: bgUrl ? `url(${bgUrl})` : 'none',
+        backgroundImage: bgUrl ? `url(${bgUrl})` : 'url(/deep-sea-bg.jpg)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundAttachment: 'fixed'

@@ -61,7 +61,7 @@ export const useSession = (
   const startVoiceInput = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Browser doesn't support basic speech recognition. Please type instead.");
+      setElevenWarning("Browser doesn't support basic speech recognition. Please type your message.");
       return;
     }
 
@@ -83,8 +83,7 @@ export const useSession = (
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch (e) {
-      console.error(e);
+    } catch {
       setIsRecording(false);
     }
   };
