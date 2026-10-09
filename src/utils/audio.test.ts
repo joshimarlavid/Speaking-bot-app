@@ -6,10 +6,10 @@ describe('audio utilities', () => {
     let mockOscillator: any;
     let mockGain: any;
     let mockConsoleWarn: any;
-    let playClick: any;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       vi.clearAllMocks();
+      vi.resetModules();
 
       // Create mock oscillator
       mockOscillator = {
@@ -44,15 +44,11 @@ describe('audio utilities', () => {
 
       // Stub window with AudioContext constructor
       vi.stubGlobal('window', {
-        AudioContext: vi.fn().mockImplementation(() => mockAudioContext),
-        webkitAudioContext: vi.fn().mockImplementation(() => mockAudioContext),
+        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        webkitAudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
       });
 
       mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-      vi.resetModules();
-      const audioModule = await import('./audio');
-      playClick = audioModule.playClick;
     });
 
     afterEach(() => {
@@ -60,7 +56,8 @@ describe('audio utilities', () => {
       vi.restoreAllMocks();
     });
 
-    it('should play a click sound by configuring nodes correctly', () => {
+    it('should play a click sound by configuring nodes correctly', async () => {
+      const { playClick } = await import('./audio');
       playClick();
 
       expect(mockAudioContext.createOscillator).toHaveBeenCalled();
@@ -84,8 +81,9 @@ describe('audio utilities', () => {
       expect(mockOscillator.stop).toHaveBeenCalledWith(100.1);
     });
 
-    it('should resume audio context if it is suspended', () => {
+    it('should resume audio context if it is suspended', async () => {
       mockAudioContext.state = 'suspended';
+      const { playClick } = await import('./audio');
 
       playClick();
 
@@ -97,6 +95,8 @@ describe('audio utilities', () => {
       mockAudioContext.createOscillator.mockImplementationOnce(() => {
         throw new TypeError('AudioContext not available');
       });
+
+      const { playClick } = await import('./audio');
 
       playClick();
 
