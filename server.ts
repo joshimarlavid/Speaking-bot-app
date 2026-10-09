@@ -278,6 +278,67 @@ async function startServer() {
   // Use JSON middleware for POST requests
   app.use(express.json());
 
+  // Rate limiter for proxy requests
+  const proxyRateLimitMap = new Map<string, { count: number; resetTime: number }>();
+  const PROXY_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+  const PROXY_MAX_REQUESTS_PER_WINDOW = 30;
+
+  function isProxyRateLimited(ip: string): boolean {
+    const now = Date.now();
+    const record = proxyRateLimitMap.get(ip);
+    if (!record || now > record.resetTime) {
+      proxyRateLimitMap.set(ip, { count: 1, resetTime: now + PROXY_RATE_LIMIT_WINDOW_MS });
+      return false;
+    }
+    if (record.count >= PROXY_MAX_REQUESTS_PER_WINDOW) {
+      return true;
+    }
+    record.count += 1;
+    return false;
+  }
+
+  // Proxy validation middleware to restrict allowed endpoints and enforce security controls
+  app.use('/api/gemini', (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY.trim().length === 0) {
+      res.status(503).json({ error: "Gemini API key is not configured on the server." });
+      return;
+    }
+
+    const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+    if (isProxyRateLimited(clientIp)) {
+      res.status(429).json({ error: "Too many requests. Please try again later." });
+      return;
+    }
+
+    const upgradeHeader = req.headers.upgrade;
+    const isWebSocketRequest = req.method === "GET" && typeof upgradeHeader === "string" && upgradeHeader.toLowerCase() === "websocket";
+
+    if (!isWebSocketRequest) {
+      res.status(403).json({ error: "Access denied. Proxy only allows WebSocket live connection requests." });
+      return;
+    }
+
+    let decodedUrl = "";
+    try {
+      decodedUrl = decodeURIComponent(req.url || "");
+    } catch {
+      res.status(400).json({ error: "Invalid URL encoding." });
+      return;
+    }
+
+    if (decodedUrl.includes("..") || decodedUrl.includes("\\")) {
+      res.status(403).json({ error: "Access denied. Invalid request path." });
+      return;
+    }
+
+    if (!decodedUrl.startsWith("/ws/google.ai.generativelanguage.")) {
+      res.status(403).json({ error: "Access denied. Proxy endpoint restricted." });
+      return;
+    }
+
+    next();
+  });
+
   // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
   app.use('/api/gemini', createProxyMiddleware({
     target: 'https://generativelanguage.googleapis.com',
