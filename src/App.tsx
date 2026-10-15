@@ -781,14 +781,24 @@ export default function App() {
 
   const activeUserTranscript = useMemo(() => {
     if (elevenLabsMode) {
-      return elevenMessages.filter(m => m.role === 'user').map(m => m.text).join(' ');
+      return elevenMessages.reduce((acc, m) => {
+        if (m.role === 'user') {
+          return acc ? acc + ' ' + m.text : m.text;
+        }
+        return acc;
+      }, '');
     }
     return userTranscript;
   }, [elevenLabsMode, elevenMessages, userTranscript]);
 
   const activeAiTranscript = useMemo(() => {
     if (elevenLabsMode) {
-      return elevenMessages.filter(m => m.role === 'model').map(m => m.text).join('\n\n');
+      return elevenMessages.reduce((acc, m) => {
+        if (m.role === 'model') {
+          return acc ? acc + "\n\n" + m.text : m.text;
+        }
+        return acc;
+      }, '');
     }
     return aiTranscript;
   }, [elevenLabsMode, elevenMessages, aiTranscript]);
