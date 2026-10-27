@@ -9,18 +9,6 @@ vi.mock('../utils/audio', () => ({
   playClick: vi.fn(),
 }));
 
-const mockGenerateContent = vi.fn();
-
-vi.mock('@google/genai', () => {
-  return {
-    GoogleGenAI: class {
-      models = {
-        generateContent: mockGenerateContent,
-      };
-    },
-  };
-});
-
 describe('useExercises', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,6 +18,7 @@ describe('useExercises', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('should initialize with default states', () => {
@@ -95,7 +84,7 @@ describe('useExercises', () => {
   });
 
   describe('generateNewExercise', () => {
-    it('should generate a new exercise using GoogleGenAI on success', async () => {
+    it('should generate a new exercise using backend API on success', async () => {
       const generatedExercise = {
         topic: 'Present Simple',
         question: 'She _____ to school every day.',
@@ -104,9 +93,10 @@ describe('useExercises', () => {
         explanation: 'Third-person singular takes "goes".',
       };
 
-      mockGenerateContent.mockResolvedValueOnce({
-        text: `\`\`\`json\n${JSON.stringify(generatedExercise)}\n\`\`\``,
-      });
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => generatedExercise,
+      } as Response);
 
       const { result } = renderHook(() => useExercises());
 
@@ -119,6 +109,10 @@ describe('useExercises', () => {
         await genPromise;
       });
 
+      expect(fetchSpy).toHaveBeenCalledWith('/api/generate-exercise', expect.objectContaining({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }));
       expect(result.current.currentExercise).toEqual(generatedExercise);
       expect(result.current.isGeneratingExercise).toBe(false);
       expect(result.current.selectedAnswer).toBeNull();
@@ -127,9 +121,9 @@ describe('useExercises', () => {
       expect(result.current.incorrectAttempts).toEqual({});
     });
 
-    it('should fallback to preloaded exercise if GoogleGenAI fails', async () => {
+    it('should fallback to preloaded exercise if backend API call fails', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      mockGenerateContent.mockRejectedValueOnce(new Error('AI generation failed'));
+      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('API request failed'));
 
       const { result } = renderHook(() => useExercises());
 
