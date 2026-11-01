@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { float32ToPcm16Base64 } from './utils/audio';
+import { float32ToPcm16Base64, base64ToFloat32 } from './utils/audio';
 
 export function useLiveAPI() {
   const [isConnected, setIsConnected] = useState(false);
@@ -269,16 +269,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
               if (audioContextRef.current) {
                 try {
                 const audioContext = audioContextRef.current;
-                const binaryString = atob(base64Audio);
-                const bytes = new Uint8Array(binaryString.length);
-                for (let i = 0; i < binaryString.length; i++) {
-                  bytes[i] = binaryString.charCodeAt(i);
-                }
-                const pcm16 = new Int16Array(bytes.buffer);
-                const float32 = new Float32Array(pcm16.length);
-                for (let i = 0; i < pcm16.length; i++) {
-                  float32[i] = pcm16[i] / 32768;
-                }
+                const float32 = base64ToFloat32(base64Audio);
                 
                 const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
                 audioBuffer.getChannelData(0).set(float32);
