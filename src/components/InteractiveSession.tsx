@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, MessageSquare, AlertCircle, Play, Square, Star, Lock, EyeOff, Eye, Check, RefreshCw, Send, Mail, BookOpen } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
-import { BEGINNER_DIALOGUES } from '../beginnerDialogues';
+import { getTopicDialogue, BeginnerDialogueLine } from '../beginnerDialogues';
 import { GrammarTensesReference } from './GrammarTensesReference';
 
 export const InteractiveSession: React.FC<{
@@ -296,7 +296,7 @@ export const InteractiveSession: React.FC<{
             <BookOpen size={20} /> Supported Dialogue: {selectedTopic.title}
           </h3>
           <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-            {((BEGINNER_DIALOGUES[selectedRole.id]?.[selectedTopic.id] as unknown) as any[])?.map((line: any, idx: number) => (
+            {getTopicDialogue(selectedRole?.id, selectedTopic?.id)?.map((line: BeginnerDialogueLine, idx: number) => (
               <div key={idx} className={`p-4 rounded-xl border ${line.speaker === 'user' ? 'bg-blue-950/20 border-blue-900/30 ml-4 sm:ml-8' : 'bg-fuchsia-950/20 border-fuchsia-900/30 mr-4 sm:mr-8'}`}>
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`text-xs font-bold uppercase tracking-wider ${line.speaker === 'user' ? 'text-blue-400' : 'text-fuchsia-400'}`}>
