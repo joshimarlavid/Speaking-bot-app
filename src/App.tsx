@@ -863,10 +863,10 @@ export default function App() {
     }
   };
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   const startVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setElevenWarning("Speech Recognition is not supported by your current browser. Please type your message.");
       return;
@@ -882,7 +882,7 @@ export default function App() {
         setIsRecording(true);
       };
 
-      recognition.onerror = (e: any) => {
+      recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
         setIsRecording(false);
         const errType = e?.error;
         if (errType === 'not-allowed') {
@@ -898,7 +898,7 @@ export default function App() {
         setIsRecording(false);
       };
 
-      recognition.onresult = async (event: any) => {
+      recognition.onresult = async (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         if (transcript.trim()) {
           await handleElevenMessage(transcript);
