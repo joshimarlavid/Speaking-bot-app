@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { float32ToPcm16Base64 } from './utils/audio';
 
 export function useLiveAPI() {
   const [isConnected, setIsConnected] = useState(false);
@@ -156,16 +157,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
               
               processor.onaudioprocess = (e) => {
                 const inputData = e.inputBuffer.getChannelData(0);
-                const pcm16 = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                  pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-                }
-                const buffer = new ArrayBuffer(pcm16.length * 2);
-                const view = new DataView(buffer);
-                for (let i = 0; i < pcm16.length; i++) {
-                  view.setInt16(i * 2, pcm16[i], true);
-                }
-                const base64 = btoa(String.fromCharCode.apply(null, new Uint8Array(buffer)));
+                const base64 = float32ToPcm16Base64(inputData);
                 
                 if (sessionRef.current) {
                   try {
