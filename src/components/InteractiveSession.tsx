@@ -5,6 +5,8 @@ import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, MessageSquare, AlertCircle, Play, Square, Star, Lock, EyeOff, Eye, Check, RefreshCw, Send, Mail, BookOpen } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 import { getTopicDialogue, BeginnerDialogueLine } from '../beginnerDialogues';
+import { Message } from '../types';
+import { BEGINNER_DIALOGUES } from '../beginnerDialogues';
 import { GrammarTensesReference } from './GrammarTensesReference';
 
 export const InteractiveSession: React.FC<{
@@ -15,8 +17,8 @@ export const InteractiveSession: React.FC<{
   handleRestart: () => void;
   elevenLabsMode: boolean;
   setElevenLabsMode: (v: boolean) => void;
-  elevenMessages: any[];
-  setElevenMessages: (v: any) => void;
+  elevenMessages: Message[];
+  setElevenMessages: React.Dispatch<React.SetStateAction<Message[]>>;
   elevenWarning: string | null;
   activeUserTranscript: string;
   activeAiTranscript: string;
@@ -57,7 +59,7 @@ export const InteractiveSession: React.FC<{
     if (!textInput.trim() || !isSessionConnected) return;
 
     if (elevenLabsMode) {
-      setElevenMessages((prev: any) => [...prev, { role: 'user', text: textInput }]);
+      setElevenMessages((prev) => [...prev, { role: 'user', text: textInput }]);
       handleElevenMessage(textInput);
     } else {
       sendTextMessage(textInput);
