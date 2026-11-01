@@ -57,10 +57,10 @@ export const useSession = (
     return aiTranscript;
   }, [aiTranscript, elevenLabsMode, elevenMessages]);
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   const startVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setElevenWarning("Browser doesn't support basic speech recognition. Please type your message.");
       return;
@@ -76,7 +76,7 @@ export const useSession = (
       recognition.onend = () => setIsRecording(false);
       recognition.onerror = () => setIsRecording(false);
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setElevenMessages(prev => [...prev, { role: 'user', text: transcript }]);
         handleElevenMessage(transcript);
