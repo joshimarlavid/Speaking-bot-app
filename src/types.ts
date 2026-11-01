@@ -1,5 +1,10 @@
 export type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
 
+export interface Message {
+  role: 'user' | 'model';
+  text: string;
+}
+
 export interface AppTheme {
   primary: string;
   textPrimary: string;
