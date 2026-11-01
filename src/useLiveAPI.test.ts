@@ -1,6 +1,7 @@
 import { renderHook, act } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useLiveAPI } from "./useLiveAPI";
+import { Role, Topic } from "./types";
 
 const mockConnect = vi.fn();
 
@@ -148,5 +149,79 @@ describe("useLiveAPI", () => {
       writable: true,
       configurable: true,
     });
+  });
+  it("should connect properly with typed Role and Topic", async () => {
+    const mockSession = {
+      sendRealtimeInput: vi.fn(),
+      close: vi.fn(),
+    };
+
+    let capturedOptions: any;
+    mockConnect.mockImplementation(async (options: any) => {
+      capturedOptions = options;
+      return mockSession;
+    });
+
+    const role: Role = {
+      id: "role_1",
+      name: "Barista",
+      description: "A friendly cafe barista",
+      winCondition: "Order coffee",
+      loseCondition: "Leave without coffee",
+      voice: "Zephyr",
+    };
+
+    const topic: Topic = {
+      id: "topic_1",
+      title: "Ordering Coffee",
+      description: "How to order in a cafe",
+      grammar: "Polite requests",
+      vocabulary: ["latte", "espresso"],
+    };
+
+    const { result } = renderHook(() => useLiveAPI());
+
+    await act(async () => {
+      await result.current.connect("Diana", role, topic, "student");
+    });
+
+    expect(mockConnect).toHaveBeenCalled();
+    expect(capturedOptions.config.systemInstruction).toContain("You are playing the role of Barista");
+    expect(capturedOptions.config.systemInstruction).toContain("Diana");
+    expect(capturedOptions.config.systemInstruction).toContain("Polite requests");
+    expect(capturedOptions.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Zephyr");
+  });
+
+  it("should connect properly in teacher mode with null role and typed Topic", async () => {
+    const mockSession = {
+      sendRealtimeInput: vi.fn(),
+      close: vi.fn(),
+    };
+
+    let capturedOptions: any;
+    mockConnect.mockImplementation(async (options: any) => {
+      capturedOptions = options;
+      return mockSession;
+    });
+
+    const topic: Topic = {
+      id: "topic_2",
+      title: "Conditionals",
+      description: "Practice conditionals",
+      grammar: "If clauses",
+      vocabulary: ["would", "could"],
+    };
+
+    const { result } = renderHook(() => useLiveAPI());
+
+    await act(async () => {
+      await result.current.connect("Evan", null, topic, "teacher");
+    });
+
+    expect(mockConnect).toHaveBeenCalled();
+    expect(capturedOptions.config.systemInstruction).toContain("You are an expert English Grammar Teacher");
+    expect(capturedOptions.config.systemInstruction).toContain("Evan");
+    expect(capturedOptions.config.systemInstruction).toContain("Conditionals");
+    expect(capturedOptions.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Puck");
   });
 });

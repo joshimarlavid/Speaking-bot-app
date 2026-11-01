@@ -1,8 +1,25 @@
 export type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
 
-export interface Message {
-  role: 'user' | 'model';
-  text: string;
+export interface Role {
+  id?: string;
+  name: string;
+  description: string;
+  winCondition: string;
+  loseCondition: string;
+  voice: string;
+  topicId?: string;
+  pronunciation?: string;
+  imageUrl?: string;
+}
+
+export interface Topic {
+  id?: string;
+  title: string;
+  grammar: string;
+  vocabulary: string[];
+  description?: string;
+  pronunciation?: string;
+  goals?: string[];
 }
 
 export interface AppTheme {
