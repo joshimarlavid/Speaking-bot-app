@@ -208,7 +208,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 });
               }, 3 * 60 * 1000); // 3 minutes
 
-            } catch (err: any) {
+            } catch (err: unknown) {
               console.warn("Microphone not found, falling back to text mode:", err);
               setHasMicrophone(false);
               // Do not disconnect, allow text mode
@@ -321,9 +321,10 @@ Please format your feedback EXACTLY using the following Markdown structure:
       
       sessionRef.current = await sessionPromise;
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to connect:", err);
-      setError(err.message || "Failed to connect to Live API");
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      setError(errorMessage || "Failed to connect to Live API");
       setIsConnecting(false);
     }
   }, []);
