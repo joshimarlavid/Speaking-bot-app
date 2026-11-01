@@ -628,8 +628,6 @@ async function startServer() {
       if (requestId) res.setHeader("x-request-id", requestId);
       if (traceId) res.setHeader("x-trace-id", traceId);
 
-      console.log(`[ElevenLabs] TTS Generated successfully: character_cost=${charCost || 'N/A'}, request_id=${requestId || 'N/A'}, trace_id=${traceId || 'N/A'}`);
-
       // Stream the audio back to the frontend
       res.setHeader("Content-Type", "audio/mpeg");
       
