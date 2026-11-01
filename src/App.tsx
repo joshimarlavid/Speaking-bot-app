@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
@@ -11,6 +10,7 @@ import { jsPDF } from 'jspdf';
 
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
+import { Message } from './types';
 import { playClick, playStart, playReward } from './utils/audio';
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 
@@ -705,7 +705,7 @@ export default function App() {
   const [elevenLabsMode, setElevenLabsMode] = useState(false);
   const [elevenLabsConnected, setElevenLabsConnected] = useState(false);
   const [elevenLabsLoading, setElevenLabsLoading] = useState(false);
-  const [elevenMessages, setElevenMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+  const [elevenMessages, setElevenMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [elevenWarning, setElevenWarning] = useState<string | null>(null);
 
@@ -863,10 +863,10 @@ export default function App() {
     }
   };
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   const startVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setElevenWarning("Speech Recognition is not supported by your current browser. Please type your message.");
       return;
@@ -882,7 +882,7 @@ export default function App() {
         setIsRecording(true);
       };
 
-      recognition.onerror = (e: any) => {
+      recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
         setIsRecording(false);
         const errType = e?.error;
         if (errType === 'not-allowed') {
@@ -898,7 +898,7 @@ export default function App() {
         setIsRecording(false);
       };
 
-      recognition.onresult = async (event: any) => {
+      recognition.onresult = async (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         if (transcript.trim()) {
           await handleElevenMessage(transcript);
@@ -1122,7 +1122,7 @@ export default function App() {
     );
   };
 
-  const triggerAIFeedback = async (historyData: any[]) => {
+  const triggerAIFeedback = async (historyData: Message[]) => {
     setIsGeneratingFeedback(true);
     setAiFeedbackReport(null);
     try {
@@ -1156,11 +1156,11 @@ export default function App() {
     playClick();
 
     // Compile dialogue history to send for feedback evaluation
-    const historyData = elevenLabsMode 
+    const historyData: Message[] = elevenLabsMode
       ? [...elevenMessages]
       : [
-          ...(userTranscript ? [{ role: 'user', text: userTranscript }] : []),
-          ...(aiTranscript ? [{ role: 'model', text: aiTranscript }] : [])
+          ...(userTranscript ? [{ role: 'user' as const, text: userTranscript }] : []),
+          ...(aiTranscript ? [{ role: 'model' as const, text: aiTranscript }] : [])
         ];
 
     if (elevenLabsMode) {

@@ -5,7 +5,8 @@ let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioCtx();
   }
   if (audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -168,4 +169,21 @@ export function float32ToPcm16Base64(inputData: Float32Array): string {
     binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[]);
   }
   return btoa(binary);
+}
+
+/**
+ * Converts base64-encoded PCM16 LE audio into Float32Array audio samples (-1.0 to 1.0).
+ * Optimized single-pass decoding eliminating redundant Uint8Array and Int16Array allocations,
+ * buffer copies, and secondary loop iterations.
+ */
+export function base64ToFloat32(base64Audio: string): Float32Array {
+  const binaryString = atob(base64Audio);
+  const pcmLength = binaryString.length >> 1;
+  const float32 = new Float32Array(pcmLength);
+  for (let i = 0; i < pcmLength; i++) {
+    const idx = i << 1;
+    const s = ((binaryString.charCodeAt(idx) | (binaryString.charCodeAt(idx + 1) << 8)) << 16) >> 16;
+    float32[i] = s / 32768;
+  }
+  return float32;
 }
