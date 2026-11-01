@@ -1,5 +1,19 @@
 export type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
 
+export type ExerciseStyle = 'choice' | 'spell' | 'unscramble';
+
+export type ExerciseAnswer = number | null;
+
+export interface Exercise {
+  id?: number | string;
+  topic: string;
+  question: string;
+  options: string[];
+  answer: number;
+  explanation: string;
+  pronunciation?: string;
+}
+
 export interface AppTheme {
   primary: string;
   textPrimary: string;

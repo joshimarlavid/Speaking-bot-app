@@ -1,14 +1,15 @@
 import { useState, useCallback, useEffect } from 'react';
 import { EXERCISES, GRAMMAR_TOPICS } from '../data';
+import { Exercise, ExerciseAnswer, ExerciseStyle } from '../types';
 import { playReward, playClick } from '../utils/audio';
 
 export const useExercises = () => {
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [currentExercise, setCurrentExercise] = useState(EXERCISES[0]);
+  const [currentExercise, setCurrentExercise] = useState<Exercise>(EXERCISES[0]);
   const [isGeneratingExercise, setIsGeneratingExercise] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<ExerciseAnswer>(null);
   const [exercisesCompleted, setExercisesCompleted] = useState(0);
-  const [exerciseStyle, setExerciseStyle] = useState<'choice' | 'spell' | 'unscramble'>('choice');
+  const [exerciseStyle, setExerciseStyle] = useState<ExerciseStyle>('choice');
   const [spellInput, setSpellInput] = useState('');
   const [spellHintTriggered, setSpellHintTriggered] = useState(false);
   const [unscrambleOptions, setUnscrambleOptions] = useState<string[]>([]);

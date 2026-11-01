@@ -1,10 +1,40 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Briefcase, RotateCcw, Volume2, Sparkle, Trophy, Flame } from 'lucide-react';
+import { Briefcase, RotateCcw, Trophy, Flame, Sparkle } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 import { EXERCISES } from '../data';
 import { GothicSkullFlowerFrame } from './GothicSkullFlowerFrame';
 import { playClick } from '../utils/audio';
+import { Exercise, ExerciseAnswer, ExerciseStyle } from '../types';
+
+export interface GrammarExercisesProps {
+  currentExerciseIndex: number;
+  setCurrentExerciseIndex: React.Dispatch<React.SetStateAction<number>> | ((v: number) => void);
+  currentExercise: Exercise;
+  setCurrentExercise: React.Dispatch<React.SetStateAction<Exercise>> | ((v: Exercise) => void);
+  isGeneratingExercise: boolean;
+  selectedAnswer: ExerciseAnswer;
+  setSelectedAnswer: React.Dispatch<React.SetStateAction<ExerciseAnswer>> | ((v: ExerciseAnswer) => void);
+  exercisesCompleted: number;
+  exerciseStyle: ExerciseStyle;
+  setExerciseStyle: React.Dispatch<React.SetStateAction<ExerciseStyle>> | ((v: ExerciseStyle) => void);
+  spellInput: string;
+  setSpellInput: React.Dispatch<React.SetStateAction<string>> | ((v: string) => void);
+  spellHintTriggered: boolean;
+  setSpellHintTriggered: React.Dispatch<React.SetStateAction<boolean>> | ((v: boolean) => void);
+  unscrambleOptions: string[];
+  unscrambleSelected: string[];
+  setUnscrambleSelected: React.Dispatch<React.SetStateAction<string[]>>;
+  exerciseStreak: number;
+  incorrectAttempts: Record<number, boolean>;
+  setIncorrectAttempts: React.Dispatch<React.SetStateAction<Record<number, boolean>>>;
+  spellError: boolean;
+  generateNewExercise: () => void;
+  handleChoiceSelect: (idx: number) => void;
+  verifyScribeAnswer: () => void;
+  verifyUnscrambleAnswer: () => void;
+  setUnscrambleOptions: React.Dispatch<React.SetStateAction<string[]>>;
+}
 
 export const GrammarExercises = React.memo(({
   currentExerciseIndex, setCurrentExerciseIndex, currentExercise, setCurrentExercise, isGeneratingExercise,
@@ -12,34 +42,7 @@ export const GrammarExercises = React.memo(({
   setSpellInput, spellHintTriggered, setSpellHintTriggered, unscrambleOptions,
   unscrambleSelected, setUnscrambleSelected, exerciseStreak, incorrectAttempts, setIncorrectAttempts,
   spellError, generateNewExercise, handleChoiceSelect, verifyScribeAnswer, verifyUnscrambleAnswer, setUnscrambleOptions
-}: {
-  currentExerciseIndex: number;
-  setCurrentExerciseIndex: (v: number) => void;
-  currentExercise: any;
-  setCurrentExercise: (v: any) => void;
-  isGeneratingExercise: boolean;
-  selectedAnswer: number | null;
-  setSelectedAnswer: (v: any) => void;
-  exercisesCompleted: number;
-  exerciseStyle: string;
-  setExerciseStyle: (v: any) => void;
-  spellInput: string;
-  setSpellInput: (v: string) => void;
-  spellHintTriggered: boolean;
-  setSpellHintTriggered: (v: boolean) => void;
-  unscrambleOptions: string[];
-  unscrambleSelected: string[];
-  setUnscrambleSelected: (v: any) => void;
-  exerciseStreak: number;
-  incorrectAttempts: Record<number, boolean>;
-  setIncorrectAttempts: (v: any) => void;
-  spellError: boolean;
-  generateNewExercise: () => void;
-  handleChoiceSelect: (idx: number) => void;
-  verifyScribeAnswer: () => void;
-  verifyUnscrambleAnswer: () => void;
-  setUnscrambleOptions: (v: any) => void;
-}) => {
+}: GrammarExercisesProps) => {
   const { activeTheme } = useAppContext();
 
   return (
@@ -162,8 +165,8 @@ export const GrammarExercises = React.memo(({
                               onClick={() => {
                                 if (selectedAnswer !== null) return;
                                 playClick();
-                                setUnscrambleSelected((prev: any) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
-                                setUnscrambleOptions((prev: any) => [...prev, word]);
+                                setUnscrambleSelected((prev) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
+                                setUnscrambleOptions((prev) => [...prev, word]);
                               }}
                               className="px-4 py-2 bg-blue-900/40 text-blue-200 font-bold border border-blue-500/50 rounded-lg shadow-md hover:bg-red-900/40 hover:border-red-500/50 hover:text-red-200 transition-colors"
                             >
@@ -182,8 +185,8 @@ export const GrammarExercises = React.memo(({
                               onClick={() => {
                                 if (selectedAnswer !== null) return;
                                 playClick();
-                                setUnscrambleOptions((prev: any) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
-                                setUnscrambleSelected((prev: any) => [...prev, word]);
+                                setUnscrambleOptions((prev) => [...prev.slice(0, idx), ...prev.slice(idx + 1)]);
+                                setUnscrambleSelected((prev) => [...prev, word]);
                               }}
                               className="px-4 py-2 bg-zinc-900 text-zinc-300 font-bold border border-zinc-700 rounded-lg shadow-sm hover:bg-zinc-800 hover:border-amber-500/50 hover:text-amber-300 transition-all active:scale-95"
                             >
@@ -294,3 +297,4 @@ export const GrammarExercises = React.memo(({
     </div>
   );
 });
+GrammarExercises.displayName = 'GrammarExercises';
