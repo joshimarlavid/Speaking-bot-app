@@ -753,6 +753,32 @@ Keep the tone encouraging, inspiring, and professional.`;
     }
   });
 
+  // In-memory LRU cache for generated flashcard data
+  const FLASHCARD_CACHE_MAX_SIZE = 500;
+  const flashcardCache = new Map<string, any>();
+
+  function getCachedFlashcard(key: string): any | undefined {
+    if (!flashcardCache.has(key)) return undefined;
+    const value = flashcardCache.get(key);
+    // Refresh position for LRU
+    flashcardCache.delete(key);
+    flashcardCache.set(key, value);
+    return value;
+  }
+
+  function setCachedFlashcard(key: string, value: any): void {
+    if (flashcardCache.has(key)) {
+      flashcardCache.delete(key);
+    } else if (flashcardCache.size >= FLASHCARD_CACHE_MAX_SIZE) {
+      // Evict oldest item
+      const oldestKey = flashcardCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        flashcardCache.delete(oldestKey);
+      }
+    }
+    flashcardCache.set(key, value);
+  }
+
   // API route for detailed dynamic vocabulary flashcard enrichment
   app.post("/api/flashcard", async (req: express.Request, res: express.Response) => {
     try {
@@ -764,12 +790,20 @@ Keep the tone encouraging, inspiring, and professional.`;
         return;
       }
 
+      const cacheKey = `${safeVocab.toLowerCase()}:::${safeTopic.toLowerCase()}`;
+      const cached = getCachedFlashcard(cacheKey);
+      if (cached) {
+        res.status(200).json(cached);
+        return;
+      }
+
       const geminiKey = process.env.GEMINI_API_KEY;
       const isKeyValid = geminiKey && geminiKey.trim().length > 10;
 
       if (!isKeyValid) {
         // Return rich, beautiful offline card description instantly
         const offlineCard = generateResilientOfflineCard(safeVocab, safeTopic);
+        setCachedFlashcard(cacheKey, offlineCard);
         res.status(200).json(offlineCard);
         return;
       }
@@ -802,9 +836,11 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
         const text = geminiResponse.text?.trim() || "{}";
         const cleaned = text.startsWith("```json") ? text.replace(/^[^{]*/, "").replace(/[^}]*$/, "") : text;
         const data = JSON.parse(cleaned);
+        setCachedFlashcard(cacheKey, data);
         res.status(200).json(data);
       } catch (err) {
         const offlineCard = generateResilientOfflineCard(safeVocab, safeTopic);
+        setCachedFlashcard(cacheKey, offlineCard);
         res.status(200).json(offlineCard);
       }
     } catch (error: any) {

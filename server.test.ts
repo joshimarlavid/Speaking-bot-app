@@ -183,3 +183,186 @@ describe('Proxy Security Middleware (/api/gemini)', () => {
     });
   });
 });
+
+describe('Flashcard API Caching & Functionality (/api/flashcard)', () => {
+  function createFlashcardApp(options: { maxCacheSize?: number; mockGenerator?: (vocab: string, topic?: string) => Promise<any> } = {}) {
+    const app = express();
+    app.use(express.json());
+
+    const FLASHCARD_CACHE_MAX_SIZE = options.maxCacheSize || 500;
+    const flashcardCache = new Map<string, any>();
+
+    function getCachedFlashcard(key: string): any | undefined {
+      if (!flashcardCache.has(key)) return undefined;
+      const value = flashcardCache.get(key);
+      flashcardCache.delete(key);
+      flashcardCache.set(key, value);
+      return value;
+    }
+
+    function setCachedFlashcard(key: string, value: any): void {
+      if (flashcardCache.has(key)) {
+        flashcardCache.delete(key);
+      } else if (flashcardCache.size >= FLASHCARD_CACHE_MAX_SIZE) {
+        const oldestKey = flashcardCache.keys().next().value;
+        if (oldestKey !== undefined) {
+          flashcardCache.delete(oldestKey);
+        }
+      }
+      flashcardCache.set(key, value);
+    }
+
+    let generatorCalls = 0;
+
+    app.post('/api/flashcard', async (req: express.Request, res: express.Response) => {
+      try {
+        const { vocab, topic } = req.body;
+        const safeVocab = typeof vocab === 'string' ? vocab.trim().slice(0, 100) : '';
+        const safeTopic = typeof topic === 'string' ? topic.trim().slice(0, 120) : '';
+        if (!safeVocab) {
+          res.status(400).json({ error: 'Missing required parameter: vocab' });
+          return;
+        }
+
+        const cacheKey = `${safeVocab.toLowerCase()}:::${safeTopic.toLowerCase()}`;
+        const cached = getCachedFlashcard(cacheKey);
+        if (cached) {
+          res.status(200).json({ ...cached, _cached: true });
+          return;
+        }
+
+        generatorCalls++;
+        const generated = options.mockGenerator
+          ? await options.mockGenerator(safeVocab, safeTopic)
+          : {
+              vocab: safeVocab,
+              definitionEn: `Meaning of ${safeVocab}`,
+              definitionEs: `Significado de ${safeVocab}`,
+              ipa: `/${safeVocab}/`,
+              partOfSpeech: 'noun',
+              exampleEn: `Example with ${safeVocab}`,
+              exampleEs: `Ejemplo con ${safeVocab}`,
+              syllables: safeVocab,
+              tips: 'Practice this'
+            };
+
+        setCachedFlashcard(cacheKey, generated);
+        res.status(200).json({ ...generated, _cached: false });
+      } catch (err) {
+        res.status(500).json({ error: 'Failed' });
+      }
+    });
+
+    return {
+      app,
+      getGeneratorCalls: () => generatorCalls,
+      getCacheSize: () => flashcardCache.size
+    };
+  }
+
+  function postJson(port: number, path: string, body: any): Promise<{ status: number; body: any }> {
+    return new Promise((resolve, reject) => {
+      const dataString = JSON.stringify(body);
+      const req = http.request(
+        {
+          host: '127.0.0.1',
+          port,
+          method: 'POST',
+          path,
+          headers: {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(dataString)
+          }
+        },
+        (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk));
+          res.on('end', () => {
+            let parsed = data;
+            try {
+              parsed = JSON.parse(data);
+            } catch {}
+            resolve({ status: res.statusCode || 0, body: parsed });
+          });
+        }
+      );
+      req.on('error', reject);
+      req.write(dataString);
+      req.end();
+    });
+  }
+
+  it('should return 400 when vocab is missing or empty', async () => {
+    const { app } = createFlashcardApp();
+    await runTestServer(app, async (port) => {
+      const res = await postJson(port, '/api/flashcard', { topic: 'Shopping' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('Missing required parameter');
+    });
+  });
+
+  it('should generate on cache miss and serve from cache on subsequent identical requests', async () => {
+    const { app, getGeneratorCalls } = createFlashcardApp();
+    await runTestServer(app, async (port) => {
+      const res1 = await postJson(port, '/api/flashcard', { vocab: 'checkout', topic: 'Supermarket' });
+      expect(res1.status).toBe(200);
+      expect(res1.body._cached).toBe(false);
+      expect(getGeneratorCalls()).toBe(1);
+
+      const res2 = await postJson(port, '/api/flashcard', { vocab: 'checkout', topic: 'Supermarket' });
+      expect(res2.status).toBe(200);
+      expect(res2.body._cached).toBe(true);
+      expect(getGeneratorCalls()).toBe(1); // Didn't call generator again
+    });
+  });
+
+  it('should match cache keys in a case-insensitive manner', async () => {
+    const { app, getGeneratorCalls } = createFlashcardApp();
+    await runTestServer(app, async (port) => {
+      const res1 = await postJson(port, '/api/flashcard', { vocab: 'CheckOut', topic: 'SuperMarket' });
+      expect(res1.status).toBe(200);
+      expect(getGeneratorCalls()).toBe(1);
+
+      const res2 = await postJson(port, '/api/flashcard', { vocab: 'checkout', topic: 'supermarket' });
+      expect(res2.status).toBe(200);
+      expect(res2.body._cached).toBe(true);
+      expect(getGeneratorCalls()).toBe(1);
+    });
+  });
+
+  it('should enforce LRU capacity bounds and evict oldest entries when full', async () => {
+    const maxCacheSize = 2;
+    const { app, getGeneratorCalls, getCacheSize } = createFlashcardApp({ maxCacheSize });
+    await runTestServer(app, async (port) => {
+      // Insert item A
+      await postJson(port, '/api/flashcard', { vocab: 'wordA', topic: 'T1' });
+      expect(getGeneratorCalls()).toBe(1);
+      expect(getCacheSize()).toBe(1);
+
+      // Insert item B
+      await postJson(port, '/api/flashcard', { vocab: 'wordB', topic: 'T1' });
+      expect(getGeneratorCalls()).toBe(2);
+      expect(getCacheSize()).toBe(2);
+
+      // Re-access item A to make it recently used (so B becomes oldest)
+      const resA = await postJson(port, '/api/flashcard', { vocab: 'wordA', topic: 'T1' });
+      expect(resA.body._cached).toBe(true);
+      expect(getGeneratorCalls()).toBe(2);
+
+      // Insert item C - this should evict item B
+      await postJson(port, '/api/flashcard', { vocab: 'wordC', topic: 'T1' });
+      expect(getGeneratorCalls()).toBe(3);
+      expect(getCacheSize()).toBe(2);
+
+      // Query item A - should still be cached
+      const resA2 = await postJson(port, '/api/flashcard', { vocab: 'wordA', topic: 'T1' });
+      expect(resA2.body._cached).toBe(true);
+      expect(getGeneratorCalls()).toBe(3);
+
+      // Query item B - was evicted, should be a miss and call generator again
+      const resB = await postJson(port, '/api/flashcard', { vocab: 'wordB', topic: 'T1' });
+      expect(resB.body._cached).toBe(false);
+      expect(getGeneratorCalls()).toBe(4);
+    });
+  });
+});
