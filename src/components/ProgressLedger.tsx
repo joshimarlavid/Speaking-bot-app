@@ -5,6 +5,7 @@ import { useAppContext } from '../contexts/AppContext';
 import { GothicSkullFlowerFrame } from './GothicSkullFlowerFrame';
 import { generatePDFSummary } from '../utils/pdfGenerator';
 import { playClick } from '../utils/audio';
+import { FeedbackLog } from '../types';
 
 export const ProgressLedger: React.FC<{
   exercisesCompleted: number;
@@ -50,7 +51,7 @@ export const ProgressLedger: React.FC<{
             {logs.length === 0 ? (
               <p className="text-zinc-500 italic text-center py-8">No prophecies recorded yet. Complete a roleplay session or exercise.</p>
             ) : (
-              logs.slice().reverse().map((log: any, idx: number) => {
+              logs.slice().reverse().map((log: FeedbackLog, idx: number) => {
                 const isExpanded = expandedLogIndex === idx;
                 return (
                   <div key={idx} className="bg-zinc-900/50 border border-zinc-800 rounded-xl overflow-hidden transition-all">

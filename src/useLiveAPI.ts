@@ -1,5 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { float32ToPcm16Base64 } from './utils/audio';
+import { Role, Topic } from './types';
 import { float32ToPcm16Base64, base64ToFloat32 } from './utils/audio';
 
 export function useLiveAPI() {
@@ -19,8 +21,8 @@ export function useLiveAPI() {
 
   const connect = useCallback(async (
     studentName: string,
-    role: any,
-    topic: any,
+    role: Role | null,
+    topic: Topic,
     mode: 'student' | 'teacher' = 'student',
     challenge?: { type: string, content: string }
   ) => {

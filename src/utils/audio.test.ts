@@ -1,11 +1,47 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock, type MockInstance } from 'vitest';
+
+interface MockAudioParam {
+  setValueAtTime: Mock;
+  exponentialRampToValueAtTime: Mock;
+  linearRampToValueAtTime?: Mock;
+}
+
+interface MockOscillatorNode {
+  type: string;
+  frequency: MockAudioParam;
+  connect: Mock;
+  start: Mock;
+  stop: Mock;
+}
+
+interface MockGainNode {
+  gain: MockAudioParam;
+  connect: Mock;
+}
+
+interface MockBiquadFilterNode {
+  type: string;
+  frequency: MockAudioParam;
+  connect: Mock;
+}
+
+interface MockAudioContext {
+  currentTime: number;
+  state: AudioContextState | string;
+  resume: Mock;
+  createOscillator: Mock;
+  createGain: Mock;
+  createBiquadFilter?: Mock;
+  destination: object;
+}
+
 
 describe('audio utilities', () => {
   describe('playClick', () => {
-    let mockAudioContext: any;
-    let mockOscillator: any;
-    let mockGain: any;
-    let mockConsoleWarn: any;
+    let mockAudioContext: MockAudioContext;
+    let mockOscillator: MockOscillatorNode;
+    let mockGain: MockGainNode;
+    let mockConsoleWarn: MockInstance;
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -44,8 +80,8 @@ describe('audio utilities', () => {
 
       // Stub window with AudioContext constructor
       vi.stubGlobal('window', {
-        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
-        webkitAudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        AudioContext: vi.fn(function() { return mockAudioContext; }),
+        webkitAudioContext: vi.fn(function() { return mockAudioContext; }),
       });
 
       mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -102,15 +138,30 @@ describe('audio utilities', () => {
 
       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio click failed to play:', expect.any(TypeError));
     });
+
+    it('should not throw and should log a warning when AudioContext is unsupported or without DOM support', async () => {
+      vi.stubGlobal('window', {
+        AudioContext: undefined,
+        webkitAudioContext: undefined,
+      });
+      const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue(null);
+
+      const { playClick } = await import('./audio');
+
+      expect(() => playClick()).not.toThrow();
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio click failed to play:', expect.any(TypeError));
+
+      getElementByIdSpy.mockRestore();
+    });
   });
 
   describe('playStart', () => {
-    let mockAudioContext: any;
-    let mockOscillator1: any;
-    let mockOscillator2: any;
-    let mockGain: any;
-    let mockFilter: any;
-    let mockConsoleWarn: any;
+    let mockAudioContext: MockAudioContext;
+    let mockOscillator1: MockOscillatorNode;
+    let mockOscillator2: MockOscillatorNode;
+    let mockGain: MockGainNode;
+    let mockFilter: MockBiquadFilterNode;
+    let mockConsoleWarn: MockInstance;
     let oscCount = 0;
 
     beforeEach(() => {
@@ -173,7 +224,7 @@ describe('audio utilities', () => {
       };
 
       vi.stubGlobal('window', {
-        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        AudioContext: vi.fn(function() { return mockAudioContext; }),
       });
 
       mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -224,6 +275,150 @@ describe('audio utilities', () => {
       playStart();
 
       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(Error));
+    });
+
+    it('should not throw and should log a warning when AudioContext is unsupported or without DOM support', async () => {
+      vi.stubGlobal('window', {
+        AudioContext: undefined,
+        webkitAudioContext: undefined,
+      });
+      const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue(null);
+
+      const { playStart } = await import('./audio');
+
+      expect(() => playStart()).not.toThrow();
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(TypeError));
+
+      getElementByIdSpy.mockRestore();
+    });
+  });
+
+
+  describe('playReward', () => {
+    let mockAudioContext: any;
+    let mockConsoleWarn: any;
+    let createdOscillators: any[];
+    let createdGains: any[];
+    let createdFilters: any[];
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.resetModules();
+
+      createdOscillators = [];
+      createdGains = [];
+      createdFilters = [];
+
+      mockAudioContext = {
+        currentTime: 50,
+        state: 'running',
+        resume: vi.fn(),
+        createOscillator: vi.fn(() => {
+          const osc = {
+            type: '',
+            frequency: {
+              setValueAtTime: vi.fn(),
+              exponentialRampToValueAtTime: vi.fn(),
+            },
+            connect: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+          };
+          createdOscillators.push(osc);
+          return osc;
+        }),
+        createGain: vi.fn(() => {
+          const gain = {
+            gain: {
+              setValueAtTime: vi.fn(),
+              linearRampToValueAtTime: vi.fn(),
+              exponentialRampToValueAtTime: vi.fn(),
+            },
+            connect: vi.fn(),
+          };
+          createdGains.push(gain);
+          return gain;
+        }),
+        createBiquadFilter: vi.fn(() => {
+          const filter = {
+            type: '',
+            frequency: {
+              setValueAtTime: vi.fn(),
+              exponentialRampToValueAtTime: vi.fn(),
+            },
+            connect: vi.fn(),
+          };
+          createdFilters.push(filter);
+          return filter;
+        }),
+        destination: {},
+      };
+
+      vi.stubGlobal('window', {
+        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        webkitAudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+      });
+
+      mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('should play the reward arpeggio chord successfully', async () => {
+      const { playReward } = await import('./audio');
+
+      playReward();
+
+      // 4 chord frequencies, each has 2 oscillators (triangle + sine harmonic), 1 gain, 1 filter
+      expect(mockAudioContext.createOscillator).toHaveBeenCalledTimes(8);
+      expect(mockAudioContext.createGain).toHaveBeenCalledTimes(4);
+      expect(mockAudioContext.createBiquadFilter).toHaveBeenCalledTimes(4);
+
+      expect(createdOscillators.length).toBe(8);
+      expect(createdGains.length).toBe(4);
+      expect(createdFilters.length).toBe(4);
+
+      // Verify oscillators start and stop was invoked
+      createdOscillators.forEach((osc) => {
+        expect(osc.start).toHaveBeenCalled();
+        expect(osc.stop).toHaveBeenCalled();
+      });
+
+      // Verify gain nodes connect to destination
+      createdGains.forEach((gain) => {
+        expect(gain.connect).toHaveBeenCalledWith(mockAudioContext.destination);
+      });
+
+      expect(mockConsoleWarn).not.toHaveBeenCalled();
+    });
+
+    it('should catch and log errors if audio playback fails', async () => {
+      mockAudioContext.createOscillator.mockImplementationOnce(() => {
+        throw new Error('Reward audio error');
+      });
+
+      const { playReward } = await import('./audio');
+
+      expect(() => playReward()).not.toThrow();
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(Error));
+    });
+
+    it('should not throw and should log a warning when AudioContext is unsupported or without DOM support', async () => {
+      vi.stubGlobal('window', {
+        AudioContext: undefined,
+        webkitAudioContext: undefined,
+      });
+      const getElementByIdSpy = vi.spyOn(document, 'getElementById').mockReturnValue(null);
+
+      const { playReward } = await import('./audio');
+
+      expect(() => playReward()).not.toThrow();
+      expect(mockConsoleWarn).toHaveBeenCalledWith('Audio reward failed to play:', expect.any(TypeError));
+
+      getElementByIdSpy.mockRestore();
     });
   });
 
