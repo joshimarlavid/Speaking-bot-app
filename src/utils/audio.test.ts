@@ -1,11 +1,47 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock, type MockInstance } from 'vitest';
+
+interface MockAudioParam {
+  setValueAtTime: Mock;
+  exponentialRampToValueAtTime: Mock;
+  linearRampToValueAtTime?: Mock;
+}
+
+interface MockOscillatorNode {
+  type: string;
+  frequency: MockAudioParam;
+  connect: Mock;
+  start: Mock;
+  stop: Mock;
+}
+
+interface MockGainNode {
+  gain: MockAudioParam;
+  connect: Mock;
+}
+
+interface MockBiquadFilterNode {
+  type: string;
+  frequency: MockAudioParam;
+  connect: Mock;
+}
+
+interface MockAudioContext {
+  currentTime: number;
+  state: AudioContextState | string;
+  resume: Mock;
+  createOscillator: Mock;
+  createGain: Mock;
+  createBiquadFilter?: Mock;
+  destination: object;
+}
+
 
 describe('audio utilities', () => {
   describe('playClick', () => {
-    let mockAudioContext: any;
-    let mockOscillator: any;
-    let mockGain: any;
-    let mockConsoleWarn: any;
+    let mockAudioContext: MockAudioContext;
+    let mockOscillator: MockOscillatorNode;
+    let mockGain: MockGainNode;
+    let mockConsoleWarn: MockInstance;
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -44,8 +80,8 @@ describe('audio utilities', () => {
 
       // Stub window with AudioContext constructor
       vi.stubGlobal('window', {
-        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
-        webkitAudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        AudioContext: vi.fn(function() { return mockAudioContext; }),
+        webkitAudioContext: vi.fn(function() { return mockAudioContext; }),
       });
 
       mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -105,12 +141,12 @@ describe('audio utilities', () => {
   });
 
   describe('playStart', () => {
-    let mockAudioContext: any;
-    let mockOscillator1: any;
-    let mockOscillator2: any;
-    let mockGain: any;
-    let mockFilter: any;
-    let mockConsoleWarn: any;
+    let mockAudioContext: MockAudioContext;
+    let mockOscillator1: MockOscillatorNode;
+    let mockOscillator2: MockOscillatorNode;
+    let mockGain: MockGainNode;
+    let mockFilter: MockBiquadFilterNode;
+    let mockConsoleWarn: MockInstance;
     let oscCount = 0;
 
     beforeEach(() => {
@@ -173,7 +209,7 @@ describe('audio utilities', () => {
       };
 
       vi.stubGlobal('window', {
-        AudioContext: vi.fn(function(this: any) { return mockAudioContext; }),
+        AudioContext: vi.fn(function() { return mockAudioContext; }),
       });
 
       mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
