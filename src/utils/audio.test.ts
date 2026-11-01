@@ -226,4 +226,45 @@ describe('audio utilities', () => {
       expect(mockConsoleWarn).toHaveBeenCalledWith('Audio start failed to play:', expect.any(Error));
     });
   });
+
+  describe('float32ToPcm16Base64', () => {
+    it('should correctly convert Float32Array to base64 PCM16 LE matching baseline', async () => {
+      const { float32ToPcm16Base64 } = await import('./audio');
+
+      const testSamples = new Float32Array([-1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5]);
+
+      // Baseline reference implementation
+      const pcm16 = new Int16Array(testSamples.length);
+      for (let i = 0; i < testSamples.length; i++) {
+        pcm16[i] = Math.max(-1, Math.min(1, testSamples[i])) * 32767;
+      }
+      const buffer = new ArrayBuffer(pcm16.length * 2);
+      const view = new DataView(buffer);
+      for (let i = 0; i < pcm16.length; i++) {
+        view.setInt16(i * 2, pcm16[i], true);
+      }
+      const expectedBase64 = btoa(String.fromCharCode.apply(null, new Uint8Array(buffer) as unknown as number[]));
+
+      const actualBase64 = float32ToPcm16Base64(testSamples);
+      expect(actualBase64).toBe(expectedBase64);
+    });
+
+    it('should handle empty Float32Array', async () => {
+      const { float32ToPcm16Base64 } = await import('./audio');
+      expect(float32ToPcm16Base64(new Float32Array(0))).toBe('');
+    });
+
+    it('should handle large audio buffers exceeding chunk size without stack overflow', async () => {
+      const { float32ToPcm16Base64 } = await import('./audio');
+      // Buffer larger than 32768 samples (65536 bytes)
+      const largeSamples = new Float32Array(35000);
+      for (let i = 0; i < largeSamples.length; i++) {
+        largeSamples[i] = Math.sin(i * 0.01);
+      }
+      const base64 = float32ToPcm16Base64(largeSamples);
+      expect(base64).toBeDefined();
+      expect(typeof base64).toBe('string');
+      expect(base64.length).toBeGreaterThan(0);
+    });
+  });
 });

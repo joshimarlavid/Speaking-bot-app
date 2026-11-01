@@ -143,3 +143,29 @@ export function playReward() {
     console.warn('Audio reward failed to play:', error);
   }
 }
+
+/**
+ * Converts Float32Array audio samples (-1.0 to 1.0) into base64-encoded PCM16 LE audio.
+ * Optimized single-pass conversion avoiding redundant ArrayBuffer, DataView, and loop iterations.
+ */
+export function float32ToPcm16Base64(inputData: Float32Array): string {
+  const len = inputData.length;
+  const pcm16 = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+  }
+  const bytes = new Uint8Array(pcm16.buffer);
+
+  // String.fromCharCode.apply has a stack limit on arguments in JS engines (typically 65536).
+  // For standard audio chunks (e.g. 2048 samples = 4096 bytes), direct apply is extremely fast.
+  // For larger buffers, chunked processing ensures safety against stack overflows.
+  if (bytes.length <= 0x8000) {
+    return btoa(String.fromCharCode.apply(null, bytes as unknown as number[]));
+  }
+
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[]);
+  }
+  return btoa(binary);
+}
