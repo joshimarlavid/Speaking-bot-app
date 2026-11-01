@@ -267,4 +267,73 @@ describe('audio utilities', () => {
       expect(base64.length).toBeGreaterThan(0);
     });
   });
+
+  describe('base64ToFloat32', () => {
+    it('should correctly convert base64 PCM16 LE audio into Float32Array matching baseline', async () => {
+      const { base64ToFloat32 } = await import('./audio');
+
+      // Create test PCM16 values covering positive, negative, zero, and boundary limits
+      const testPcm16 = new Int16Array([-32768, -32767, -16384, -1, 0, 1, 16384, 32767]);
+      const bytes = new Uint8Array(testPcm16.buffer);
+      const base64Audio = btoa(String.fromCharCode.apply(null, bytes as unknown as number[]));
+
+      // Baseline reference implementation
+      const binaryString = atob(base64Audio);
+      const baselineBytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        baselineBytes[i] = binaryString.charCodeAt(i);
+      }
+      const pcm16 = new Int16Array(baselineBytes.buffer);
+      const expectedFloat32 = new Float32Array(pcm16.length);
+      for (let i = 0; i < pcm16.length; i++) {
+        expectedFloat32[i] = pcm16[i] / 32768;
+      }
+
+      const actualFloat32 = base64ToFloat32(base64Audio);
+      expect(actualFloat32.length).toBe(expectedFloat32.length);
+      for (let i = 0; i < expectedFloat32.length; i++) {
+        expect(actualFloat32[i]).toBe(expectedFloat32[i]);
+      }
+    });
+
+    it('should correctly handle empty base64 string', async () => {
+      const { base64ToFloat32 } = await import('./audio');
+      const actual = base64ToFloat32('');
+      expect(actual).toBeInstanceOf(Float32Array);
+      expect(actual.length).toBe(0);
+    });
+
+    it('should correctly handle large base64 audio chunks', async () => {
+      const { base64ToFloat32 } = await import('./audio');
+      const samples = 4800; // 9600 bytes
+      const pcm16 = new Int16Array(samples);
+      for (let i = 0; i < samples; i++) {
+        pcm16[i] = Math.round(Math.sin(i * 0.1) * 32000);
+      }
+      const bytes = new Uint8Array(pcm16.buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i += 0x8000) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000) as unknown as number[]);
+      }
+      const base64Audio = btoa(binary);
+
+      const float32 = base64ToFloat32(base64Audio);
+      expect(float32.length).toBe(samples);
+      for (let i = 0; i < samples; i++) {
+        expect(float32[i]).toBe(pcm16[i] / 32768);
+      }
+    });
+
+    it('should accurately roundtrip with float32ToPcm16Base64', async () => {
+      const { float32ToPcm16Base64, base64ToFloat32 } = await import('./audio');
+      const input = new Float32Array([-1.0, -0.5, 0.0, 0.5, 1.0]);
+      const base64 = float32ToPcm16Base64(input);
+      const decoded = base64ToFloat32(base64);
+
+      expect(decoded.length).toBe(input.length);
+      for (let i = 0; i < input.length; i++) {
+        expect(decoded[i]).toBeCloseTo(input[i], 3);
+      }
+    });
+  });
 });
