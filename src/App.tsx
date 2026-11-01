@@ -10,6 +10,7 @@ import { jsPDF } from 'jspdf';
 
 import { useLiveAPI } from './useLiveAPI';
 import { useGeneratedBackground } from './useGeneratedBackground';
+import { Message } from './types';
 import { playClick, playStart, playReward } from './utils/audio';
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 
@@ -704,7 +705,7 @@ export default function App() {
   const [elevenLabsMode, setElevenLabsMode] = useState(false);
   const [elevenLabsConnected, setElevenLabsConnected] = useState(false);
   const [elevenLabsLoading, setElevenLabsLoading] = useState(false);
-  const [elevenMessages, setElevenMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+  const [elevenMessages, setElevenMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [elevenWarning, setElevenWarning] = useState<string | null>(null);
 
@@ -1121,7 +1122,7 @@ export default function App() {
     );
   };
 
-  const triggerAIFeedback = async (historyData: any[]) => {
+  const triggerAIFeedback = async (historyData: Message[]) => {
     setIsGeneratingFeedback(true);
     setAiFeedbackReport(null);
     try {
@@ -1155,11 +1156,11 @@ export default function App() {
     playClick();
 
     // Compile dialogue history to send for feedback evaluation
-    const historyData = elevenLabsMode 
+    const historyData: Message[] = elevenLabsMode
       ? [...elevenMessages]
       : [
-          ...(userTranscript ? [{ role: 'user', text: userTranscript }] : []),
-          ...(aiTranscript ? [{ role: 'model', text: aiTranscript }] : [])
+          ...(userTranscript ? [{ role: 'user' as const, text: userTranscript }] : []),
+          ...(aiTranscript ? [{ role: 'model' as const, text: aiTranscript }] : [])
         ];
 
     if (elevenLabsMode) {
