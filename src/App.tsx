@@ -13,6 +13,7 @@ import { useGeneratedBackground } from './useGeneratedBackground';
 import { Message } from './types';
 import { playClick, playStart, playReward } from './utils/audio';
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
+import { FeedbackLog } from './types';
 
 type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
 
@@ -480,7 +481,7 @@ export default function App() {
       
       const runes = (exercisesCompleted * 150) + 1200;
       const lvl = Math.floor(runes / 1000);
-      let logs: any[] = [];
+      let logs: FeedbackLog[] = [];
       try {
         logs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
       } catch (e) {
@@ -580,7 +581,7 @@ export default function App() {
         doc.text('"No feedback echo has been recorded in the scrolls of dialog yet. Complete exercises and roleplays to write to your scrolls."', 25, y + 4);
         y += 12;
       } else {
-        recentLogs.forEach((log: any) => {
+        recentLogs.forEach((log: FeedbackLog) => {
           doc.setFont("helvetica", "bold");
           doc.setFontSize(9.5);
           doc.setTextColor(120, 20, 20);
@@ -2393,7 +2394,7 @@ export default function App() {
                               </div>
                             );
                           }
-                          return [...logs].reverse().map((log: any, idx: number) => {
+                          return [...logs].reverse().map((log: FeedbackLog, idx: number) => {
                             const isExpanded = expandedLogIndex === idx;
                             return (
                               <div key={idx} className="bg-zinc-900/80 border border-red-900/20 p-4 rounded-xl space-y-2">

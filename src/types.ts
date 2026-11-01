@@ -41,3 +41,14 @@ export interface AppTheme {
   svgPrimary: string;
   svgSecondary: string;
 }
+
+export interface FeedbackLog {
+  date: string;
+  role: string;
+  topic: string;
+  ratingAI: number;
+  ratingTopic: number;
+  comments: string;
+  student?: string;
+  aiReport?: string | null;
+}
