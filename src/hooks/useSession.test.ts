@@ -129,3 +129,174 @@ describe('useSession - SpeechRecognition handling', () => {
     expect(result.current.isRecording).toBe(true);
   });
 });
+
+describe("useSession - handleElevenMessage", () => {
+  const originalFetch = global.fetch;
+  const originalAudio = global.Audio;
+  const originalSpeechSynthesis = window.speechSynthesis;
+  const originalSpeechSynthesisUtterance = (window as any).SpeechSynthesisUtterance;
+  const originalCreateObjectURL = URL.createObjectURL;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    global.Audio = originalAudio;
+    window.speechSynthesis = originalSpeechSynthesis;
+    (window as any).SpeechSynthesisUtterance = originalSpeechSynthesisUtterance;
+    URL.createObjectURL = originalCreateObjectURL;
+  });
+
+  it("returns early without making a fetch call or updating loading state when text is empty", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    const { result } = renderHook(() =>
+      useSession(
+        "student",
+        { id: "role1", name: "Role 1", voice: "Puck", description: "A friendly partner" },
+        "Alice",
+        {},
+        {},
+        null
+      )
+    );
+
+    await act(async () => {
+      await result.current.handleElevenMessage("");
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(result.current.elevenMessages).toEqual([]);
+  });
+
+  it("returns early without making a fetch call when text contains only whitespace", async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    const { result } = renderHook(() =>
+      useSession(
+        "student",
+        { id: "role1", name: "Role 1", voice: "Puck", description: "A friendly partner" },
+        "Alice",
+        {},
+        {},
+        null
+      )
+    );
+
+    await act(async () => {
+      await result.current.handleElevenMessage("   \t\n  ");
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(result.current.elevenMessages).toEqual([]);
+  });
+
+  it("successfully processes non-empty text message with audio playback", async () => {
+    const playMock = vi.fn().mockResolvedValue(undefined);
+    class MockAudio {
+      src: string;
+      constructor(src: string) {
+        this.src = src;
+      }
+      play = playMock;
+    }
+    global.Audio = MockAudio as any;
+    URL.createObjectURL = vi.fn().mockReturnValue("blob:mock-audio-url");
+
+    const mockBlob = new Blob(["mock-audio"], { type: "audio/mpeg" });
+    const mockHeaders = new Headers({
+      "x-response-text": encodeURIComponent("Hello Alice! Nice to meet you."),
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      headers: mockHeaders,
+      blob: vi.fn().mockResolvedValue(mockBlob),
+    });
+
+    const { result } = renderHook(() =>
+      useSession(
+        "student",
+        { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
+        "Alice",
+        {},
+        {},
+        null
+      )
+    );
+
+    await act(async () => {
+      await result.current.handleElevenMessage("Hi there!");
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/chat-roleplay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        user_input: "Hi there!",
+        persona_prompt:
+          "You are playing the role of Sarah. A helpful guide. The user is the student Alice. Have a conversation with them and naturally encourage them to win. Maintain this character deeply. Keep your responses short, natural, and friendly (1-2 sentences).",
+        voice_id: "EXAVITQu4vr4xnSDxMaL",
+      }),
+    });
+
+    expect(result.current.elevenMessages).toEqual([
+      { role: "model", text: "Hello Alice! Nice to meet you." },
+    ]);
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(playMock).toHaveBeenCalled();
+  });
+
+  it("handles speech synthesis fallback when elevenlabs is missing or error", async () => {
+    const mockSpeak = vi.fn();
+    window.speechSynthesis = {
+      speak: mockSpeak,
+    } as any;
+    class MockSpeechSynthesisUtterance {
+      text: string;
+      lang = "";
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    (window as any).SpeechSynthesisUtterance = MockSpeechSynthesisUtterance as any;
+
+    const mockHeaders = new Headers({
+      "x-elevenlabs-missing": "true",
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      headers: mockHeaders,
+      json: vi.fn().mockResolvedValue({ text: "Fallback synthesized text" }),
+    });
+
+    const { result } = renderHook(() =>
+      useSession(
+        "student",
+        { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
+        "Alice",
+        {},
+        {},
+        null
+      )
+    );
+
+    await act(async () => {
+      await result.current.handleElevenMessage("Test fallback");
+    });
+
+    expect(result.current.elevenWarning).toBe(
+      "Neural Voice fallback: Please configure ELEVEN_API_KEY to hear realistic characters."
+    );
+    expect(mockSpeak).toHaveBeenCalled();
+    expect(result.current.elevenMessages).toEqual([
+      { role: "model", text: "Fallback synthesized text" },
+    ]);
+    expect(result.current.elevenLabsLoading).toBe(false);
+  });
+});
