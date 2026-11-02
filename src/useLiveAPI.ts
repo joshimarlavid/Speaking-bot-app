@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { float32ToPcm16Base64 } from './utils/audio';
 import { Role, Topic } from './types';
 import { float32ToPcm16Base64, base64ToFloat32 } from './utils/audio';
 
