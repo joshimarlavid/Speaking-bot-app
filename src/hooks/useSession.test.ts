@@ -136,6 +136,8 @@ describe("useSession - handleElevenMessage", () => {
   const originalSpeechSynthesis = window.speechSynthesis;
   const originalSpeechSynthesisUtterance = (window as any).SpeechSynthesisUtterance;
   const originalCreateObjectURL = URL.createObjectURL;
+describe('useSession - triggerAIFeedback error and success paths', () => {
+  const originalFetch = global.fetch;
 
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -159,6 +161,21 @@ describe("useSession - handleElevenMessage", () => {
         { id: "role1", name: "Role 1", voice: "Puck", description: "A friendly partner" },
         "Alice",
         {},
+    vi.restoreAllMocks();
+  });
+
+  it('sets aiFeedbackReport correctly on successful response', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ feedback: 'Great job using past tense!' }),
+    } as any);
+
+    const { result } = renderHook(() =>
+      useSession(
+        'student',
+        { id: 'role1', name: 'Role 1', voice: 'Puck' },
+        'Alice',
+        { title: 'Ordering Coffee', grammar: 'polite requests', vocabulary: ['coffee'] },
         {},
         null
       )
@@ -184,6 +201,30 @@ describe("useSession - handleElevenMessage", () => {
         "Alice",
         {},
         {},
+      await result.current.triggerAIFeedback([{ role: 'user', text: 'Can I have a coffee?' }]);
+    });
+
+    expect(result.current.isGeneratingFeedback).toBe(false);
+    expect(result.current.aiFeedbackReport).toBe('Great job using past tense!');
+    expect(global.fetch).toHaveBeenCalledWith('/api/feedback', expect.objectContaining({
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    }));
+  });
+
+  it('sets fallback message when feedback response has empty or undefined feedback', async () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as any);
+
+    const { result } = renderHook(() =>
+      useSession(
+        'teacher',
+        { id: 'role1', name: 'Teacher', voice: 'Puck' },
+        'Bob',
+        {},
+        { title: 'Grammar Focus', grammar: 'past simple', vocabulary: ['went'] },
         null
       )
     );
@@ -225,6 +266,27 @@ describe("useSession - handleElevenMessage", () => {
         { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
         "Alice",
         {},
+      await result.current.triggerAIFeedback([{ role: 'user', text: 'I went to school.' }]);
+    });
+
+    expect(result.current.isGeneratingFeedback).toBe(false);
+    expect(result.current.aiFeedbackReport).toBe('Unable to compile diagnostics report.');
+  });
+
+  it('handles non-ok HTTP error response (e.g., 500 status)', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+    } as any);
+
+    const { result } = renderHook(() =>
+      useSession(
+        'student',
+        { id: 'role1', name: 'Role 1', voice: 'Puck' },
+        'Alice',
+        { title: 'Topic', grammar: 'grammar', vocabulary: [] },
         {},
         null
       )
@@ -281,6 +343,57 @@ describe("useSession - handleElevenMessage", () => {
         { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
         "Alice",
         {},
+      await result.current.triggerAIFeedback([{ role: 'user', text: 'Hello' }]);
+    });
+
+    expect(result.current.isGeneratingFeedback).toBe(false);
+    expect(result.current.aiFeedbackReport).toBe(
+      'Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.'
+    );
+    expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+
+  it('handles network error (fetch rejects)', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = vi.fn().mockRejectedValue(new Error('Network offline'));
+
+    const { result } = renderHook(() =>
+      useSession(
+        'student',
+        { id: 'role1', name: 'Role 1', voice: 'Puck' },
+        'Alice',
+        { title: 'Topic', grammar: 'grammar', vocabulary: [] },
+        {},
+        null
+      )
+    );
+
+    await act(async () => {
+      await result.current.triggerAIFeedback([{ role: 'user', text: 'Hello' }]);
+    });
+
+    expect(result.current.isGeneratingFeedback).toBe(false);
+    expect(result.current.aiFeedbackReport).toBe(
+      'Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.'
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith('AI feedback generation error:', expect.any(Error));
+  });
+
+  it('handles JSON parsing failure from response', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => {
+        throw new Error('Invalid JSON');
+      },
+    } as any);
+
+    const { result } = renderHook(() =>
+      useSession(
+        'student',
+        { id: 'role1', name: 'Role 1', voice: 'Puck' },
+        'Alice',
+        { title: 'Topic', grammar: 'grammar', vocabulary: [] },
         {},
         null
       )
@@ -298,5 +411,13 @@ describe("useSession - handleElevenMessage", () => {
       { role: "model", text: "Fallback synthesized text" },
     ]);
     expect(result.current.elevenLabsLoading).toBe(false);
+      await result.current.triggerAIFeedback([{ role: 'user', text: 'Hello' }]);
+    });
+
+    expect(result.current.isGeneratingFeedback).toBe(false);
+    expect(result.current.aiFeedbackReport).toBe(
+      'Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.'
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith('AI feedback generation error:', expect.any(Error));
   });
 });

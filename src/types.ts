@@ -57,3 +57,8 @@ export interface FeedbackLog {
   student?: string;
   aiReport?: string | null;
 }
+
+export interface Message {
+  role: 'user' | 'model';
+  text: string;
+}
