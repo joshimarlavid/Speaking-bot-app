@@ -1,4 +1,40 @@
-export const BEGINNER_DIALOGUES: Record<string, { speaker: string, text: string, pronunciation?: string }[]> = {
+export interface BeginnerDialogueLine {
+  speaker: string;
+  text?: string;
+  pronunciation?: string;
+  en?: string;
+  es?: string;
+}
+
+export function isDialogueLineArray(value: unknown): value is BeginnerDialogueLine[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        "speaker" in item
+    )
+  );
+}
+
+export function getTopicDialogue(
+  roleId?: string,
+  topicId?: string
+): BeginnerDialogueLine[] | null {
+  if (!roleId || !topicId) return null;
+  const roleEntry: Record<string, unknown> = BEGINNER_DIALOGUES;
+  const roleData = roleEntry[roleId];
+  if (roleData && typeof roleData === "object" && topicId in roleData) {
+    const topicData = (roleData as Record<string, unknown>)[topicId];
+    if (isDialogueLineArray(topicData)) {
+      return topicData;
+    }
+  }
+  return null;
+}
+
+export const BEGINNER_DIALOGUES: Record<string, BeginnerDialogueLine[]> = {
   "introduce_yourself": [
     { speaker: "AI", text: "Hello! I don't think we've met. I'm Alex. What's your name?" },
     { speaker: "User", text: "Hello! My name is Maria. Nice to meet you.", pronunciation: "Jelou! Mái néim is Maria. Náis tu miit yu." },

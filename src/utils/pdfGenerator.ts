@@ -1,11 +1,12 @@
 import { jsPDF } from 'jspdf';
 import { playReward } from './audio';
+import { FeedbackLog } from '../types';
 
 export const generatePDFSummary = (
   studentName: string,
   exercisesCompleted: number,
   exerciseStreak: number,
-  logs: any[]
+  logs: FeedbackLog[]
 ) => {
   try {
     playReward();
@@ -70,7 +71,7 @@ export const generatePDFSummary = (
       doc.text("No prophecies recorded yet. Begin your journey.", 20, yPos);
       yPos += 20;
     } else {
-      recentLogs.forEach((log) => {
+      recentLogs.forEach((log: FeedbackLog) => {
         doc.setFillColor(25, 30, 45);
         doc.setDrawColor(60, 70, 90);
         doc.roundedRect(20, yPos - 8, 170, 42, 3, 3, 'FD');

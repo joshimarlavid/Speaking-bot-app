@@ -1,3 +1,4 @@
+import { Message } from '../types';
 import { useState, useMemo, useRef, useCallback } from 'react';
 import { useLiveAPI } from '../useLiveAPI';
 import { playStart, playClick } from '../utils/audio';
@@ -22,7 +23,7 @@ export const useSession = (
   const [elevenLabsMode, setElevenLabsMode] = useState(false);
   const [elevenLabsConnected, setElevenLabsConnected] = useState(false);
   const [elevenLabsLoading, setElevenLabsLoading] = useState(false);
-  const [elevenMessages, setElevenMessages] = useState<{ role: 'user' | 'model', text: string }[]>([]);
+  const [elevenMessages, setElevenMessages] = useState<Message[]>([]);
   const [isRecording, setIsRecording] = useState(false);
   const [elevenWarning, setElevenWarning] = useState<string | null>(null);
   const [textInput, setTextInput] = useState("");
@@ -56,10 +57,10 @@ export const useSession = (
     return aiTranscript;
   }, [aiTranscript, elevenLabsMode, elevenMessages]);
 
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<ISpeechRecognition | null>(null);
 
   const startVoiceInput = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       setElevenWarning("Browser doesn't support basic speech recognition. Please type your message.");
       return;
@@ -75,7 +76,7 @@ export const useSession = (
       recognition.onend = () => setIsRecording(false);
       recognition.onerror = () => setIsRecording(false);
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         setElevenMessages(prev => [...prev, { role: 'user', text: transcript }]);
         handleElevenMessage(transcript);
@@ -147,7 +148,7 @@ export const useSession = (
     }
   };
 
-  const triggerAIFeedback = async (historyData: any[]) => {
+  const triggerAIFeedback = async (historyData: Message[]) => {
     setIsGeneratingFeedback(true);
     setAiFeedbackReport(null);
     try {
@@ -250,11 +251,11 @@ export const useSession = (
   const handleStop = () => {
     playClick();
 
-    const historyData = elevenLabsMode
+    const historyData: Message[] = elevenLabsMode
       ? [...elevenMessages]
       : [
-          ...(userTranscript ? [{ role: 'user', text: userTranscript }] : []),
-          ...(aiTranscript ? [{ role: 'model', text: aiTranscript }] : [])
+          ...(userTranscript ? [{ role: 'user' as const, text: userTranscript }] : []),
+          ...(aiTranscript ? [{ role: 'model' as const, text: aiTranscript }] : [])
         ];
 
     if (elevenLabsMode) {

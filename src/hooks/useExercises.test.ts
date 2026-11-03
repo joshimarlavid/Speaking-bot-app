@@ -140,6 +140,52 @@ describe('useExercises', () => {
       expect(result.current.isGeneratingExercise).toBe(false);
       consoleSpy.mockRestore();
     });
+
+    it('should securely delegate to backend /api/generate-exercise without exposing client-side API keys', async () => {
+      const originalEnv = { ...process.env };
+      // Explicitly delete client-side GEMINI_API_KEY
+      delete (process.env as any).GEMINI_API_KEY;
+
+      const mockResponse = {
+        question: 'They _____ to the cinema yesterday.',
+        options: ['go', 'went', 'gone', 'goes'],
+        answer: 1,
+        explanation: 'Simple past of go is went.',
+        pronunciation: 'went: /wɛnt/'
+      };
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      } as Response);
+
+      const { result } = renderHook(() => useExercises());
+
+      let genPromise: Promise<void>;
+      act(() => {
+        genPromise = result.current.generateNewExercise();
+      });
+
+      await act(async () => {
+        await genPromise;
+      });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      const [url, options] = fetchSpy.mock.calls[0];
+      expect(url).toBe('/api/generate-exercise');
+      expect(options).toMatchObject({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      // Confirm no client-side API key header or parameter was passed
+      const headers = (options?.headers || {}) as Record<string, string>;
+      expect(headers['x-goog-api-key']).toBeUndefined();
+      expect(headers['authorization']).toBeUndefined();
+
+      expect(result.current.currentExercise.question).toBe(mockResponse.question);
+      process.env = originalEnv;
+    });
   });
 
   describe('handleChoiceSelect', () => {

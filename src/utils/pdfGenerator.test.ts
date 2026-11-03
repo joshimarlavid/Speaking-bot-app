@@ -62,6 +62,21 @@ describe('generatePDFSummary', () => {
   });
 
 
+  it('should handle errors when doc.save fails, logging the error and alerting the user', () => {
+    const saveError = new Error('Disk full or save error');
+    mockDoc.save.mockImplementationOnce(() => {
+      throw saveError;
+    });
+
+    generatePDFSummary('Test Student', 5, 2, []);
+
+    expect(mockDoc.save).toHaveBeenCalledWith('LinguaRole_Grimoire_Test_Student.pdf');
+    expect(mockConsoleError).toHaveBeenCalledWith('Failed to generate PDF', saveError);
+    expect(mockConsoleError).toHaveBeenCalledTimes(1);
+    expect(mockAlert).toHaveBeenCalledWith('Could not generate PDF. Please ensure popups are allowed.');
+    expect(mockAlert).toHaveBeenCalledTimes(1);
+  });
+
   it('should generate PDF successfully with empty logs', () => {
     generatePDFSummary('Test Student', 5, 2, []);
 
