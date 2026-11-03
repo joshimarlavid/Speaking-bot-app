@@ -1,3 +1,8 @@
+export interface Message {
+  role: 'user' | 'model';
+  text: string;
+}
+
 export type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
 
 export interface Role {
