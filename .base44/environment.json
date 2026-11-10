@@ -1,0 +1,17 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Google AI Studio (Gemini) API key — powers the one-to-one role-play partner, live voice sessions and AI feedback. Create one at https://aistudio.google.com/apikey",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ELEVEN_API_KEY",
+      "description": "Optional ElevenLabs API key for the high-fidelity neural character voices (premium voice mode). Create one at https://elevenlabs.io/app/settings/api-keys",
+      "requiredAtBoot": false
+    }
+  ]
+}

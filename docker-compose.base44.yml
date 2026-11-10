@@ -1,0 +1,40 @@
+# Base44 development stack for LINGUAROLE.
+# Runs the cloned source through the Vite dev server (via server.ts) on host port 3000,
+# so every edit is live-reloaded into the preview.
+services:
+  app:
+    image: node:22-bookworm
+    working_dir: /app
+    # Dependencies live in a named volume: install from the current lockfile on boot,
+    # then hand over to the development server.
+    command: ["sh", "-ec", "npm ci --no-audit --no-fund && exec npm run dev"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+      - BASE44_PREVIEW_MODE
+      # Vite appends the platform-provided host to its allowed hosts.
+      - __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS
+      - BASE44_PUBLIC_HOST_SUFFIX
+    env_file:
+      # Placeholders first; the platform-managed secrets file comes last and wins.
+      - ./.env.base44-defaults
+      - /run/base44/app.env
+    restart: on-failure
+    healthcheck:
+      # Probe the app's real HTTP entry point, not just the listening socket.
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
+
+volumes:
+  node_modules:

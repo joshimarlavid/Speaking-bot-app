@@ -23,7 +23,8 @@ export function useLiveAPI() {
     role: Role | null,
     topic: Topic,
     mode: 'student' | 'teacher' = 'student',
-    challenge?: { type: string, content: string }
+    challenge?: { type: string, content: string },
+    difficulty?: string
   ) => {
     setIsConnecting(true);
     setError(null);
@@ -38,6 +39,8 @@ export function useLiveAPI() {
         }
       });
       
+      const difficultyInstruction = difficulty ? `\n\n${difficulty}` : "";
+
       let challengeInstruction = "";
       if (challenge) {
         challengeInstruction = `\n\nDAILY CHALLENGE: The user is also trying to use the following ${challenge.type}: "${challenge.content}". 
@@ -52,6 +55,7 @@ Your goal is to help them practice the following grammar topic: ${topic.title}.
 Description: ${topic.description}
 Target Grammar: ${topic.grammar}
 Vocabulary: ${topic.vocabulary.join(', ')}
+${difficultyInstruction}
 ${challengeInstruction}
 
 Start by briefly introducing the topic and asking them a question or giving them a short exercise to test their understanding.
@@ -65,6 +69,7 @@ Their name is ${studentName}. Greet the user by their name: ${studentName}.
 Your goal is to have a natural conversation with them in character.
 Try to naturally steer the conversation so they can practice the following grammar: ${topic.grammar}.
 And these vocabulary words: ${topic.vocabulary.join(', ')}.
+${difficultyInstruction}
 ${challengeInstruction}
 
 The user has a specific goal to WIN this scenario: ${role.winCondition}
@@ -119,7 +124,7 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 if (mode === "teacher") {
                   initMessage = `Greeting trigger: Hi ${studentName || "there"}! Please introduce the topic "${topic?.title || "English grammar"}" and ask me a short diagnostic question to start our practice.`;
                 } else {
-                  initMessage = `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. Greet me warmly as the student named ${studentName} inside your character's persona and context. Introduce yourself very briefly in exactly 1-2 short sentences to start our conversation!`;
+                  initMessage = `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. My name is ${studentName}. Say my name in your very first sentence, greet me in character, and ask me your opening question in exactly 1-2 short sentences to start our conversation.`;
                 }
                 session.sendRealtimeInput({
                   text: initMessage

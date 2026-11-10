@@ -3,19 +3,51 @@ import { motion, AnimatePresence } from 'motion/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Dices, User, Briefcase, MessageSquare, AlertCircle, Play, Square, Settings, RefreshCw, Star, Lock, Mail, Trophy, Zap, BookOpen, Sparkles, Eye, EyeOff, Check, X, Volume2, HelpCircle, ChevronRight, Flame, RotateCcw, Sparkle, Download, Search } from 'lucide-react';
-import { STUDENTS, ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
+import { ROLES, TOPICS, GRAMMAR_TOPICS, EXERCISES } from './data';
 import { BEGINNER_DIALOGUES } from './beginnerDialogues';
 import { GrammarTensesReference } from './components/GrammarTensesReference';
+import { BotanicalBackdrop, BotanicalDivider, BotanicalEmblem, GildedFrame, LeafSprig } from './components/BotanicalOrnaments';
 import { jsPDF } from 'jspdf';
 
 import { useLiveAPI } from './useLiveAPI';
-import { useGeneratedBackground } from './useGeneratedBackground';
 import { Message } from './types';
 import { playClick, playStart, playReward } from './utils/audio';
 import { InteractiveFlashcards } from './components/InteractiveFlashcards';
 import { FeedbackLog } from './types';
 
 type MenuMode = 'student' | 'teacher' | 'exercises' | 'beginner' | 'progress' | 'flashcards';
+
+export type DifficultyId = 'seedling' | 'bloom' | 'nightshade';
+
+export const DIFFICULTIES: {
+  id: DifficultyId;
+  name: string;
+  levels: string;
+  note: string;
+  directive: string;
+}[] = [
+  {
+    id: 'seedling',
+    name: 'Seedling',
+    levels: 'A1 · A2',
+    note: 'Short, gentle sentences. Everyday words, present and past simple.',
+    directive: 'Difficulty: Seedling (A1-A2). Speak slowly and warmly in short, simple sentences using very common words and simple tenses. Offer a gentle hint if the learner hesitates.'
+  },
+  {
+    id: 'bloom',
+    name: 'Bloom',
+    levels: 'B1 · B2',
+    note: 'Natural pace. Comparatives, connectors, richer small talk.',
+    directive: 'Difficulty: Bloom (B1-B2). Speak at a natural conversational pace with a broader vocabulary, comparatives and connecting words. Gently nudge the learner beyond simple tenses.'
+  },
+  {
+    id: 'nightshade',
+    name: 'Nightshade',
+    levels: 'C1',
+    note: 'Idioms, complex clauses, a beautiful menace in the language.',
+    directive: 'Difficulty: Nightshade (C1). Speak with idiomatic, richly descriptive and faintly unsettling language, using complex clauses and less common vocabulary. Expect the learner to keep up.'
+  }
+];
 
 export interface AppTheme {
   primary: string;           
@@ -39,216 +71,119 @@ export interface AppTheme {
 
 export const THEMES: Record<MenuMode, AppTheme> = {
   student: {
-    primary: 'blue',
-    textPrimary: 'text-cyan-400',
-    textLight: 'text-cyan-100',
-    textMedium: 'text-cyan-200',
-    textMuted: 'text-cyan-300/60',
-    badgeBg: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30',
-    borderDouble: 'border-cyan-300/40',
-    borderSingle: 'border-cyan-900/40',
-    accentBtn: 'bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold',
-    accentBtnDisabled: 'disabled:bg-cyan-950/50 disabled:text-cyan-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(34,211,238,0.4)]',
-    glowHex: '#22d3ee',
-    bgGradient: 'from-cyan-950/30 via-blue-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(34,211,238,0.35)]',
-    activeIconColor: 'text-cyan-400',
-    svgPrimary: '#22d3ee',
-    svgSecondary: '#06b6d4'
-  },
-  teacher: {
-    primary: 'green',
-    textPrimary: 'text-emerald-400',
-    textLight: 'text-emerald-100',
-    textMedium: 'text-emerald-200',
-    textMuted: 'text-emerald-300/60',
-    badgeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
-    borderDouble: 'border-emerald-300/40',
-    borderSingle: 'border-emerald-950/40',
-    accentBtn: 'bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold',
-    accentBtnDisabled: 'disabled:bg-emerald-950/50 disabled:text-emerald-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(16,185,129,0.4)]',
-    glowHex: '#10b981',
-    bgGradient: 'from-emerald-950/30 via-teal-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(16,185,129,0.35)]',
-    activeIconColor: 'text-emerald-400',
-    svgPrimary: '#10b981',
-    svgSecondary: '#34d399'
-  },
-  beginner: {
-    primary: 'velvet',
-    textPrimary: 'text-fuchsia-400',
-    textLight: 'text-fuchsia-100',
-    textMedium: 'text-fuchsia-200',
-    textMuted: 'text-fuchsia-300/60',
-    badgeBg: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/30',
-    borderDouble: 'border-fuchsia-300/40',
-    borderSingle: 'border-fuchsia-950/40',
-    accentBtn: 'bg-fuchsia-500 hover:bg-fuchsia-400 text-black font-extrabold',
-    accentBtnDisabled: 'disabled:bg-fuchsia-950/50 disabled:text-fuchsia-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(217,70,239,0.4)]',
-    glowHex: '#d946ef',
-    bgGradient: 'from-fuchsia-950/30 via-purple-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(217,70,239,0.35)]',
-    activeIconColor: 'text-fuchsia-400',
-    svgPrimary: '#d946ef',
-    svgSecondary: '#e879f9'
-  },
-  exercises: {
-    primary: 'gold',
-    textPrimary: 'text-amber-400',
+    primary: 'leaf',
+    textPrimary: 'text-amber-300',
     textLight: 'text-amber-100',
     textMedium: 'text-amber-200',
     textMuted: 'text-amber-300/60',
-    badgeBg: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
-    borderDouble: 'border-amber-300/40',
-    borderSingle: 'border-amber-950/40',
-    accentBtn: 'bg-amber-500 hover:bg-amber-400 text-black font-extrabold',
-    accentBtnDisabled: 'disabled:bg-amber-950/50 disabled:text-amber-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(245,158,11,0.4)]',
-    glowHex: '#f59e0b',
-    bgGradient: 'from-amber-950/30 via-orange-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(245,158,11,0.35)]',
-    activeIconColor: 'text-amber-400',
-    svgPrimary: '#f59e0b',
-    svgSecondary: '#fbbf24'
+    badgeBg: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+    borderDouble: 'border-amber-300/45',
+    borderSingle: 'border-amber-900/45',
+    accentBtn: 'bg-amber-400 hover:bg-amber-300 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-amber-950/60 disabled:text-amber-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(201,162,75,0.35)]',
+    glowHex: '#c9a24b',
+    bgGradient: 'from-rose-950/25 via-zinc-950/60 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(201,162,75,0.28)]',
+    activeIconColor: 'text-amber-300',
+    svgPrimary: '#c9a24b',
+    svgSecondary: '#e8c97c'
+  },
+  teacher: {
+    primary: 'moss',
+    textPrimary: 'text-emerald-300',
+    textLight: 'text-emerald-100',
+    textMedium: 'text-emerald-200',
+    textMuted: 'text-emerald-300/60',
+    badgeBg: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30',
+    borderDouble: 'border-emerald-300/40',
+    borderSingle: 'border-emerald-900/45',
+    accentBtn: 'bg-emerald-400 hover:bg-emerald-300 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-emerald-950/60 disabled:text-emerald-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(147,174,148,0.32)]',
+    glowHex: '#93ae94',
+    bgGradient: 'from-emerald-950/30 via-zinc-950/60 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(147,174,148,0.26)]',
+    activeIconColor: 'text-emerald-300',
+    svgPrimary: '#93ae94',
+    svgSecondary: '#c9d9c2'
+  },
+  beginner: {
+    primary: 'nightshade',
+    textPrimary: 'text-fuchsia-300',
+    textLight: 'text-fuchsia-100',
+    textMedium: 'text-fuchsia-200',
+    textMuted: 'text-fuchsia-300/60',
+    badgeBg: 'bg-fuchsia-500/10 text-fuchsia-300 border-fuchsia-500/30',
+    borderDouble: 'border-fuchsia-300/40',
+    borderSingle: 'border-fuchsia-900/45',
+    accentBtn: 'bg-fuchsia-400 hover:bg-fuchsia-300 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-fuchsia-950/60 disabled:text-fuchsia-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(168,82,104,0.35)]',
+    glowHex: '#a85268',
+    bgGradient: 'from-fuchsia-950/25 via-purple-950/50 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(168,82,104,0.28)]',
+    activeIconColor: 'text-fuchsia-300',
+    svgPrimary: '#a85268',
+    svgSecondary: '#d8a3b1'
+  },
+  exercises: {
+    primary: 'gold',
+    textPrimary: 'text-amber-300',
+    textLight: 'text-amber-100',
+    textMedium: 'text-amber-200',
+    textMuted: 'text-amber-300/60',
+    badgeBg: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+    borderDouble: 'border-amber-300/45',
+    borderSingle: 'border-amber-950/50',
+    accentBtn: 'bg-amber-400 hover:bg-amber-300 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-amber-950/60 disabled:text-amber-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(201,162,75,0.45)]',
+    glowHex: '#d2a64e',
+    bgGradient: 'from-amber-950/30 via-zinc-950/60 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(210,166,78,0.3)]',
+    activeIconColor: 'text-amber-300',
+    svgPrimary: '#d2a64e',
+    svgSecondary: '#f0dca8'
   },
   progress: {
-    primary: 'red',
-    textPrimary: 'text-rose-400',
+    primary: 'dried-rose',
+    textPrimary: 'text-rose-300',
     textLight: 'text-rose-100',
     textMedium: 'text-rose-200',
     textMuted: 'text-rose-300/60',
-    badgeBg: 'bg-rose-500/10 text-rose-500 border-rose-500/30',
+    badgeBg: 'bg-rose-500/10 text-rose-300 border-rose-500/30',
     borderDouble: 'border-rose-300/40',
-    borderSingle: 'border-rose-950/40',
-    accentBtn: 'bg-rose-600 hover:bg-rose-500 text-white font-extrabold',
-    accentBtnDisabled: 'disabled:bg-rose-950/50 disabled:text-rose-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(244,63,94,0.4)]',
-    glowHex: '#f43f5e',
-    bgGradient: 'from-rose-950/30 via-red-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(244,63,94,0.35)]',
-    activeIconColor: 'text-rose-400',
-    svgPrimary: '#f43f5e',
-    svgSecondary: '#fb7185'
+    borderSingle: 'border-rose-950/60',
+    accentBtn: 'bg-rose-500 hover:bg-rose-400 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-rose-950/60 disabled:text-rose-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(156,53,80,0.45)]',
+    glowHex: '#9c3550',
+    bgGradient: 'from-rose-950/30 via-zinc-950/60 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(156,53,80,0.3)]',
+    activeIconColor: 'text-rose-300',
+    svgPrimary: '#9c3550',
+    svgSecondary: '#d08c9d'
   },
   flashcards: {
-    primary: 'indigo',
-    textPrimary: 'text-indigo-400',
+    primary: 'bruised-plum',
+    textPrimary: 'text-indigo-300',
     textLight: 'text-indigo-100',
     textMedium: 'text-indigo-200',
     textMuted: 'text-indigo-300/60',
-    badgeBg: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
+    badgeBg: 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30',
     borderDouble: 'border-indigo-300/40',
-    borderSingle: 'border-indigo-950/40',
-    accentBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold',
-    accentBtnDisabled: 'disabled:bg-indigo-950/50 disabled:text-indigo-300/40',
-    shadowGlow: 'shadow-[0_0_15px_rgba(99,102,241,0.4)]',
-    glowHex: '#6366f1',
-    bgGradient: 'from-indigo-950/30 via-violet-950/70 to-black/98',
-    glowClass: 'hover:shadow-[0_0_35px_rgba(99,102,241,0.35)]',
-    activeIconColor: 'text-indigo-400',
-    svgPrimary: '#6366f1',
-    svgSecondary: '#818cf8'
+    borderSingle: 'border-indigo-950/60',
+    accentBtn: 'bg-indigo-500 hover:bg-indigo-400 text-black font-extrabold',
+    accentBtnDisabled: 'disabled:bg-indigo-950/60 disabled:text-indigo-300/40',
+    shadowGlow: 'shadow-[0_0_18px_rgba(134,98,138,0.4)]',
+    glowHex: '#86628a',
+    bgGradient: 'from-indigo-950/30 via-zinc-950/60 to-black/90',
+    glowClass: 'hover:shadow-[0_0_38px_rgba(134,98,138,0.28)]',
+    activeIconColor: 'text-indigo-300',
+    svgPrimary: '#86628a',
+    svgSecondary: '#c4adc6'
   }
-};
-
-const GothicSkullFlowerFrame: React.FC<{ 
-  children: React.ReactNode; 
-  title?: string; 
-  icon?: React.ReactNode;
-  theme?: AppTheme;
-}> = ({ children, title, icon, theme }) => {
-  const activeTheme = theme || THEMES.student;
-
-  return (
-    <div className={`glass-panel p-6 sm:p-8 rounded-[2rem] border-[6px] border-double ${activeTheme.borderDouble} relative bg-black/75 shadow-2xl backdrop-blur-xl transition-all duration-500 ${activeTheme.glowClass} select-none`}>
-      {/* Bioluminescent marine glowing jellyfish corner ornaments */}
-      {/* Top Left corner */}
-      <div className={`absolute -top-3.5 -left-3.5 w-12 sm:w-16 h-12 sm:h-16 pointer-events-none ${activeTheme.textPrimary} z-20`} style={{ filter: `drop-shadow(0 0 6px ${activeTheme.glowHex})` }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full animate-pulse" fill="none">
-          <path d="M50,12 C25,12 15,30 20,48 C23,58 29,64 34,64 C38,64 43,58 50,58 C57,58 62,64 66,64 C71,64 77,58 80,48 C85,30 75,12 50,12 Z" fill="rgba(8, 20, 40, 0.5)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M46,64 Q32,82 36,94" stroke={activeTheme.svgPrimary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M50,60 Q50,85 53,95" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M54,64 Q68,82 64,94" stroke={activeTheme.svgSecondary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M25,58 Q15,75 12,85" stroke={activeTheme.svgPrimary} strokeWidth="0.8" opacity="0.8" />
-          <path d="M35,64 Q22,80 20,90" stroke={activeTheme.svgSecondary} strokeWidth="1" opacity="0.8" />
-          <path d="M65,64 Q78,80 80,90" stroke={activeTheme.svgPrimary} strokeWidth="1" opacity="0.8" />
-          <path d="M75,58 Q85,75 88,85" stroke={activeTheme.svgSecondary} strokeWidth="0.8" opacity="0.8" />
-          <circle cx="36" cy="35" r="2" fill={activeTheme.svgPrimary} />
-          <circle cx="50" cy="26" r="2.5" fill="currentColor" />
-          <circle cx="64" cy="35" r="2" fill={activeTheme.svgSecondary} />
-          <circle cx="50" cy="45" r="1.5" fill={activeTheme.svgPrimary} />
-        </svg>
-      </div>
-
-      {/* Top Right corner */}
-      <div className={`absolute -top-3.5 -right-3.5 w-12 sm:w-16 h-12 sm:h-16 pointer-events-none ${activeTheme.textPrimary} z-20`} style={{ filter: `drop-shadow(0 0 6px ${activeTheme.glowHex})` }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full scale-x-[-1] animate-pulse" fill="none">
-          <path d="M50,12 C25,12 15,30 20,48 C23,58 29,64 34,64 C38,64 43,58 50,58 C57,58 62,64 66,64 C71,64 77,58 80,48 C85,30 75,12 50,12 Z" fill="rgba(8, 20, 40, 0.5)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M46,64 Q32,82 36,94" stroke={activeTheme.svgPrimary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M50,60 Q50,85 53,95" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M54,64 Q68,82 64,94" stroke={activeTheme.svgSecondary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M25,58 Q15,75 12,85" stroke={activeTheme.svgPrimary} strokeWidth="0.8" opacity="0.8" />
-          <path d="M35,64 Q22,80 20,90" stroke={activeTheme.svgSecondary} strokeWidth="1" opacity="0.8" />
-          <path d="M65,64 Q78,80 80,90" stroke={activeTheme.svgPrimary} strokeWidth="1" opacity="0.8" />
-          <path d="M75,58 Q85,75 88,85" stroke={activeTheme.svgSecondary} strokeWidth="0.8" opacity="0.8" />
-          <circle cx="36" cy="35" r="2" fill={activeTheme.svgPrimary} />
-          <circle cx="50" cy="26" r="2.5" fill="currentColor" />
-          <circle cx="64" cy="35" r="2" fill={activeTheme.svgSecondary} />
-          <circle cx="50" cy="45" r="1.5" fill={activeTheme.svgPrimary} />
-        </svg>
-      </div>
-
-      {/* Bottom Left corner */}
-      <div className={`absolute -bottom-3.5 -left-3.5 w-12 sm:w-16 h-12 sm:h-16 pointer-events-none ${activeTheme.textPrimary} z-20`} style={{ filter: `drop-shadow(0 0 6px ${activeTheme.glowHex})` }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full scale-y-[-1] animate-pulse" fill="none">
-          <path d="M50,12 C25,12 15,30 20,48 C23,58 29,64 34,64 C38,64 43,58 50,58 C57,58 62,64 66,64 C71,64 77,58 80,48 C85,30 75,12 50,12 Z" fill="rgba(8, 20, 40, 0.5)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M46,64 Q32,82 36,94" stroke={activeTheme.svgPrimary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M50,60 Q50,85 53,95" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M54,64 Q68,82 64,94" stroke={activeTheme.svgSecondary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M25,58 Q15,75 12,85" stroke={activeTheme.svgPrimary} strokeWidth="0.8" opacity="0.8" />
-          <path d="M35,64 Q22,80 20,90" stroke={activeTheme.svgSecondary} strokeWidth="1" opacity="0.8" />
-          <path d="M65,64 Q78,80 80,90" stroke={activeTheme.svgPrimary} strokeWidth="1" opacity="0.8" />
-          <path d="M75,58 Q85,75 88,85" stroke={activeTheme.svgSecondary} strokeWidth="0.8" opacity="0.8" />
-          <circle cx="36" cy="35" r="2" fill={activeTheme.svgPrimary} />
-          <circle cx="50" cy="26" r="2.5" fill="currentColor" />
-          <circle cx="64" cy="35" r="2" fill={activeTheme.svgSecondary} />
-          <circle cx="50" cy="45" r="1.5" fill={activeTheme.svgPrimary} />
-        </svg>
-      </div>
-
-      {/* Bottom Right corner */}
-      <div className={`absolute -bottom-3.5 -right-3.5 w-12 sm:w-16 h-12 sm:h-16 pointer-events-none ${activeTheme.textPrimary} z-20`} style={{ filter: `drop-shadow(0 0 6px ${activeTheme.glowHex})` }}>
-        <svg viewBox="0 0 100 100" className="w-full h-full scale-x-[-1] scale-y-[-1] animate-pulse" fill="none">
-          <path d="M50,12 C25,12 15,30 20,48 C23,58 29,64 34,64 C38,64 43,58 50,58 C57,58 62,64 66,64 C71,64 77,58 80,48 C85,30 75,12 50,12 Z" fill="rgba(8, 20, 40, 0.5)" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <path d="M46,64 Q32,82 36,94" stroke={activeTheme.svgPrimary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M50,60 Q50,85 53,95" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-          <path d="M54,64 Q68,82 64,94" stroke={activeTheme.svgSecondary} strokeWidth="1.8" strokeLinecap="round" />
-          <path d="M25,58 Q15,75 12,85" stroke={activeTheme.svgPrimary} strokeWidth="0.8" opacity="0.8" />
-          <path d="M35,64 Q22,80 20,90" stroke={activeTheme.svgSecondary} strokeWidth="1" opacity="0.8" />
-          <path d="M65,64 Q78,80 80,90" stroke={activeTheme.svgPrimary} strokeWidth="1" opacity="0.8" />
-          <path d="M75,58 Q85,75 88,85" stroke={activeTheme.svgSecondary} strokeWidth="0.8" opacity="0.8" />
-          <circle cx="36" cy="35" r="2" fill={activeTheme.svgPrimary} />
-          <circle cx="50" cy="26" r="2.5" fill="currentColor" />
-          <circle cx="64" cy="35" r="2" fill={activeTheme.svgSecondary} />
-          <circle cx="50" cy="45" r="1.5" fill={activeTheme.svgPrimary} />
-        </svg>
-      </div>
-
-      {title && (
-        <h2 className={`text-2xl font-display tracking-widest mb-6 flex items-center gap-3 text-white drop-shadow-md border-b ${activeTheme.borderSingle} pb-3`}>
-          {icon && <span className={activeTheme.activeIconColor}>{icon}</span>}
-          {title}
-        </h2>
-      )}
-
-      <div className={`relative z-10 w-full ${activeTheme.textLight}`}>
-        {children}
-      </div>
-    </div>
-  );
 };
 
 export default function App() {
@@ -257,22 +192,9 @@ export default function App() {
   });
   const activeTheme = THEMES[mode] || THEMES.student;
 
-  const [bubbles, setBubbles] = useState<{ id: number; left: number; size: number; delay: number; duration: number; type: number }[]>([]);
-
-  useEffect(() => {
-    const generated = Array.from({ length: 30 }).map((_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      size: Math.random() * 10 + 3, // various sizes (3px to 13px)
-      delay: Math.random() * 10,
-      duration: Math.random() * 15 + 15, // float duration (15s to 30s)
-      type: Math.floor(Math.random() * 3) // 0: blue/cyan, 1: green, 2: purple
-    }));
-    setBubbles(generated);
-  }, []);
   const [showDialogue, setShowDialogue] = useState(true);
   const [studentName, setStudentName] = useState(() => {
-    return localStorage.getItem('linguaRole_student') || STUDENTS[0];
+    return localStorage.getItem('linguaRole_student') || '';
   });
   const [selectedRole, setSelectedRole] = useState(() => {
     const saved = localStorage.getItem('linguaRole_role');
@@ -722,6 +644,16 @@ export default function App() {
   const isSessionConnected = isConnected || elevenLabsConnected;
   const isSessionConnecting = isConnecting || elevenLabsLoading;
 
+  const [difficulty, setDifficulty] = useState<DifficultyId>(() => {
+    const saved = localStorage.getItem('linguarole_difficulty') as DifficultyId | null;
+    return saved && DIFFICULTIES.some(d => d.id === saved) ? saved : 'bloom';
+  });
+  const activeDifficulty = DIFFICULTIES.find(d => d.id === difficulty) ?? DIFFICULTIES[1];
+
+  useEffect(() => {
+    localStorage.setItem('linguarole_difficulty', difficulty);
+  }, [difficulty]);
+
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<'all' | 'A1' | 'A2' | 'B1_B2' | 'C1'>('all');
   const [roleSearchQuery, setRoleSearchQuery] = useState("");
 
@@ -767,18 +699,45 @@ export default function App() {
         
       if (!matchesSearch) return false;
       
-      // 2. Level filter matching
+      // 2. Chosen difficulty narrows the partner list
+      if (mode === 'student') {
+        const lvl = getRoleLevel(r.id, r.name);
+        if (difficulty === 'seedling') return lvl.includes("A1") || lvl.includes("A2");
+        if (difficulty === 'bloom') return lvl.includes("B1") || lvl.includes("B2");
+        if (difficulty === 'nightshade') return lvl.includes("C1");
+      }
+
+      // 3. Optional manual level filter
       if (selectedLevelFilter === 'all') return true;
       const lvl = getRoleLevel(r.id, r.name);
-      
+
       if (selectedLevelFilter === 'A1') return lvl.includes("A1");
       if (selectedLevelFilter === 'A2') return lvl.includes("A2");
       if (selectedLevelFilter === 'B1_B2') return lvl.includes("B1") || lvl.includes("B2");
       if (selectedLevelFilter === 'C1') return lvl.includes("C1");
-      
+
       return true;
     });
-  }, [baseFilteredRoles, roleSearchQuery, selectedLevelFilter, getRoleLevel]);
+  }, [baseFilteredRoles, roleSearchQuery, selectedLevelFilter, difficulty, mode, getRoleLevel]);
+
+  const chooseDifficulty = useCallback((next: DifficultyId) => {
+    setDifficulty(next);
+    if (mode !== 'student') return;
+    const matches = (r: { id?: string; name: string }) => {
+      const lvl = getRoleLevel(r.id, r.name);
+      if (next === 'seedling') return lvl.includes("A1") || lvl.includes("A2");
+      if (next === 'bloom') return lvl.includes("B1") || lvl.includes("B2");
+      return lvl.includes("C1");
+    };
+    if (!matches(selectedRole)) {
+      const first = ROLES.find(matches);
+      if (first) {
+        setSelectedRole(first);
+        const topic = TOPICS.find(t => t.id === first.topicId);
+        if (topic) setSelectedTopic(topic);
+      }
+    }
+  }, [mode, getRoleLevel, selectedRole]);
 
   const activeUserTranscript = useMemo(() => {
     if (elevenLabsMode) {
@@ -813,7 +772,7 @@ export default function App() {
     setElevenMessages(prev => [...prev, { role: 'user', text }]);
 
     try {
-      const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. The user is the student ${studentName}. Have a conversation with them and naturally encourage them to win. Maintain this character deeply. Keep your responses short, natural, and friendly (1-2 sentences).`;
+      const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. The user is the student named ${studentName}; address them by name naturally. ${activeDifficulty.directive} Have a conversation with them in character and naturally encourage them to win. Keep your responses short, natural, and friendly (1-2 sentences).`;
 
       const response = await fetch("/api/chat-roleplay", {
         method: "POST",
@@ -956,10 +915,6 @@ export default function App() {
     }
   };
 
-  const { bgUrl, isGenerating } = useGeneratedBackground(
-    "sublime high contrast deep abyssal ocean bed seascape, glowing bioluminescent neon blue jellyfish and flora, vibrant neon green coral reefs and neon purple sea anemone, realistic underwater light-beams caustics, shimmering water texture with glowing particulate bubbles, dark atmospheric depths, magical fantasy art, ultra realistic aquatic rendering"
-  );
-
   const dailyChallenge = useMemo(() => {
     const allItems: { type: 'vocabulary' | 'grammar', content: string, topic: string }[] = [];
     
@@ -1063,7 +1018,7 @@ export default function App() {
       setElevenWarning(null);
       
       try {
-        const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. Greet the student named ${studentName} very warmly inside your character context, introducing yourself in exactly 1-2 short sentences.`;
+        const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. Greet the student named ${studentName} by name in your very first sentence, inside your character context, introducing yourself in exactly 1-2 short sentences. ${activeDifficulty.directive}`;
         
         const response = await fetch("/api/chat-roleplay", {
           method: "POST",
@@ -1119,7 +1074,8 @@ export default function App() {
       (mode === 'student' || mode === 'beginner') ? selectedRole : null, 
       (mode === 'student' || mode === 'beginner') ? selectedTopic : selectedGrammarTopic, 
       (mode === 'beginner' ? 'student' : mode) as 'student' | 'teacher',
-      dailyChallenge
+      dailyChallenge,
+      activeDifficulty.directive
     );
   };
 
@@ -1193,7 +1149,8 @@ export default function App() {
         (mode === 'student' || mode === 'beginner') ? selectedRole : null, 
         (mode === 'student' || mode === 'beginner') ? selectedTopic : selectedGrammarTopic, 
         (mode === 'beginner' ? 'student' : mode) as 'student' | 'teacher',
-        dailyChallenge
+        dailyChallenge,
+        activeDifficulty.directive
       );
     }, 500);
   };
@@ -1221,139 +1178,57 @@ export default function App() {
   };
 
   return (
-    <div 
-      className="min-h-screen bg-black text-amber-400 font-sans selection:bg-cyan-500/30 relative overflow-hidden runes-bg"
-      style={{
-        backgroundImage: bgUrl ? `url(${bgUrl})` : 'url(/deep-sea-bg.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed'
-      }}
-    >
-      {/* Live drifting sea bubbles */}
-      <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
-        {bubbles.map(bubble => {
-          let color = 'rgba(34, 211, 238, 0.25)'; // neon cyan
-          if (bubble.type === 1) color = 'rgba(16, 185, 129, 0.22)'; // neon emerald
-          if (bubble.type === 2) color = 'rgba(217, 70, 239, 0.22)'; // neon purple
-          return (
-            <div 
-              key={bubble.id}
-              className="absolute bottom-0 rounded-full border border-white/10 pointer-events-none select-none"
-              style={{
-                left: `${bubble.left}%`,
-                width: `${bubble.size}px`,
-                height: `${bubble.size}px`,
-                backgroundColor: color,
-                boxShadow: `0 0 10px ${color}, inset 0 0 4px rgba(255,255,255,0.4)`,
-                animation: `bubble-rise ${bubble.duration}s infinite linear, sway 8s infinite ease-in-out`,
-                animationDelay: `${bubble.delay}s`,
-              }}
-            />
-          );
-        })}
-      </div>
+    <div className="min-h-screen font-sans selection:bg-amber-500/25 relative overflow-hidden text-amber-100">
+      <BotanicalBackdrop />
 
-      {/* Living animated water caustics light effect overlay */}
-      <div className="fixed inset-0 pointer-events-none z-0 water-caustics opacity-40 mix-blend-color-dodge"></div>
-
-      {/* Vintage dark overlay for readability */}
-      <div className={`fixed inset-0 bg-gradient-to-br ${activeTheme.bgGradient} backdrop-blur-md z-0 mix-blend-multiply transition-all duration-700`}></div>
-      
-      {/* Corner decorations for dark waves with silver borders */}
-      <div className="fixed top-0 left-0 w-48 lg:w-96 h-48 lg:h-96 z-0 pointer-events-none opacity-45 mix-blend-screen" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/subtle-waves.png')", borderRight: '8px double rgba(34, 211, 238, 0.3)', borderBottom: '8px double rgba(34, 211, 238, 0.3)', borderBottomRightRadius: '90% 50%', boxShadow: '0 0 40px rgba(6, 182, 212, 0.2)' }}></div>
-      <div className="fixed bottom-0 right-0 w-48 lg:w-96 h-48 lg:h-96 z-0 pointer-events-none opacity-45 mix-blend-screen" style={{ backgroundImage: "url('https://www.transparenttextures.com/patterns/subtle-waves.png')", borderLeft: '8px double rgba(34, 211, 238, 0.3)', borderTop: '8px double rgba(34, 211, 238, 0.3)', borderTopLeftRadius: '90% 50%', boxShadow: '0 0 40px rgba(6, 182, 212, 0.2)' }}></div>
-      
-      {/* Watermark Logo & Brand vector silhouettes */}
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.06] mix-blend-screen flex items-center justify-center overflow-hidden">
-        <div className="w-[85vw] h-[85vw] max-w-[750px] max-h-[750px] relative flex items-center justify-center">
-          <svg viewBox="0 0 400 400" className="w-full h-full text-cyan-400/60 animate-[spin_120s_infinite_linear]" fill="none" stroke="currentColor">
-            <circle cx="200" cy="200" r="185" strokeWidth="1" strokeDasharray="4,12" className="text-fuchsia-500/40" />
-            <circle cx="200" cy="200" r="172" strokeWidth="2" className="text-cyan-500/30" />
-            <rect x="80" y="80" width="240" height="240" strokeWidth="1" className="text-emerald-500/20 rotate-45" />
-            
-            {/* Intricate skull outline matching the gothic logo */}
-            <g transform="translate(150, 140) scale(1.0)" className="text-cyan-400/80">
-              <path d="M50,15 C25,15 15,35 15,55 C15,70 25,82 25,95 L30,105 L70,105 L75,95 C75,82 85,70 85,55 C85,35 75,15 50,15 Z" strokeWidth="2" />
-              <ellipse cx="36" cy="55" rx="7" ry="11" strokeWidth="1.5" className="text-fuchsia-400" />
-              <ellipse cx="64" cy="55" rx="7" ry="11" strokeWidth="1.5" className="text-fuchsia-400" />
-              <path d="M50,68 L46,76 L54,76 Z" fill="currentColor" opacity="0.6" />
-              <line x1="38" y1="95" x2="62" y2="95" strokeWidth="1.5" />
-              <line x1="42" y1="91" x2="42" y2="99" strokeWidth="1" />
-              <line x1="46" y1="91" x2="46" y2="99" strokeWidth="1" />
-              <line x1="50" y1="91" x2="50" y2="99" strokeWidth="1" />
-              <line x1="54" y1="91" x2="54" y2="99" strokeWidth="1" />
-              <line x1="58" y1="91" x2="58" y2="99" strokeWidth="1" />
-            </g>
-            <path d="M80,310 Q120,380 180,330 T280,340 T310,290" strokeWidth="2.5" className="text-emerald-500/50" strokeLinecap="round" />
-            <path d="M310,90 C280,110 280,140 310,160 C340,140 340,110 310,90 Z" strokeWidth="1.5" className="text-fuchsia-400/50" />
-            <circle cx="310" cy="125" r="5" fill="#d946ef" opacity="0.4" />
-            <path d="M80,90 C50,110 50,140 80,160 C110,140 110,110 80,90 Z" strokeWidth="1.5" className="text-fuchsia-400/50" />
-            <circle cx="80" cy="125" r="5" fill="#d946ef" opacity="0.4" />
-          </svg>
-        </div>
-      </div>
-
-      <div className="fixed inset-0 z-0 pointer-events-none opacity-[0.06] mix-blend-screen" style={{ backgroundImage: "url('/logo.png')", backgroundSize: '500px', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}></div>
-      
-      {/* Vignette Overlay for Text Legibility */}
-      <div className="fixed inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/90 z-0 pointer-events-none backdrop-blur-[1px]"></div>
-      
       <div className="relative z-10 w-full">
-        <header className={`border-b ${activeTheme.borderSingle} py-6 px-4 sm:px-6 lg:px-8 shadow-sm bg-black/40 backdrop-blur-md transition-colors duration-500`}>
-          <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6 relative">
-            
-            {/* Centered title section with decorative frame background */}
-            <div className="flex-1 flex flex-col items-center justify-center relative py-8">
-              
-              {/* Majestic double-border square frame behind header text */}
-              <div 
-                className="absolute w-56 h-56 sm:w-64 sm:h-64 border-2 border-dashed border-cyan-500/20 pointer-events-none z-0 flex items-center justify-center animate-[spin_50s_infinite_linear]"
-                style={{ transform: 'rotate(45deg)' }}
-              >
-                <div className="w-[90%] h-[90%] border-2 border-double border-cyan-400/25 flex items-center justify-center">
-                  <div className="w-[85%] h-[85%] border border-fuchsia-500/20 rotate-12"></div>
-                </div>
-              </div>
-              
-              {/* Header components in front */}
-              <div className="relative z-10 flex flex-col items-center text-center">
-                {/* Brand Logo inside header */}
-                <div className={`w-16 h-16 rounded-xl overflow-hidden border ${activeTheme.borderSingle} flex items-center justify-center bg-black/80 transition-all duration-500 mb-3 ${activeTheme.shadowGlow}`}>
-                  <img src="/logo.png" alt="Dark Art Studio Logo" className="w-full h-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling?.classList.remove('hidden'); }} />
-                  <div className={`hidden text-[8px] font-bold text-center ${activeTheme.textPrimary} uppercase tracking-widest px-1`}>Logo</div>
-                </div>
+        <header className="relative px-3 sm:px-6 lg:px-8 pt-6 sm:pt-10">
+          <div className="max-w-6xl mx-auto relative">
+            <div className="relative rounded-[1.6rem] border border-amber-500/30 velvet-panel backdrop-blur-md overflow-hidden px-5 sm:px-10 py-8 sm:py-10">
+              <div className="pointer-events-none absolute inset-[6px] rounded-[1.3rem] border border-amber-500/15" />
+              <LeafSprig className="pointer-events-none absolute -top-2 -left-2 h-20 w-20 sm:h-28 sm:w-28 opacity-80 gold-ember" />
+              <LeafSprig flipX className="pointer-events-none absolute -top-2 -right-2 h-20 w-20 sm:h-28 sm:w-28 opacity-70 gold-ember" />
+              <LeafSprig flipY className="pointer-events-none absolute -bottom-2 -left-2 h-16 w-16 sm:h-20 sm:w-20 opacity-40" />
+              <LeafSprig flipX flipY className="pointer-events-none absolute -bottom-2 -right-2 h-16 w-16 sm:h-20 sm:w-20 opacity-40" />
 
-                <h1 
-                  className="text-4xl sm:text-6xl md:text-7xl font-bold tracking-[0.15em] text-white drop-shadow-[0_0_25px_rgba(34,211,238,0.5)] mt-1 select-none transition-all duration-300" 
-                  style={{ fontFamily: '"Cinzel Decorative", "Cinzel", "Grenze Gotisch", serif', textShadow: '0 0 15px rgba(34,211,238,0.4), 0 0 30px rgba(139,92,246,0.3)' }}
-                >
-                  DARK ART STUDIO
+              <BotanicalEmblem className="mx-auto h-20 w-20 sm:h-24 sm:w-24 gold-ember" />
+
+              <div className="relative z-10 flex flex-col items-center text-center mt-1">
+                <p className="font-mono text-[9px] sm:text-[10px] tracking-[0.5em] uppercase text-amber-300/60">
+                  Botanical Grammar Conservatory
+                </p>
+                <h1 className="gold-title text-[2.5rem] leading-[1.05] sm:text-6xl md:text-7xl mt-3">
+                  LINGUAROLE
                 </h1>
-                
-                <span className="text-[11px] sm:text-xs md:text-sm font-medium tracking-[0.35em] text-cyan-200 uppercase mt-3 font-sans">
-                  The FW/AW Collection: Wearable Canvas
-                </span>
-                <span className="text-[9px] sm:text-[10px] tracking-[0.25em] text-emerald-400/70 uppercase mt-1.5 font-mono">
-                  Immersive English Practice
+                <div className="mt-4 flex items-center gap-3 text-amber-200/70">
+                  <span className="h-px w-8 sm:w-14 bg-amber-500/40" />
+                  <p className="font-serif text-sm sm:text-lg tracking-[0.42em] uppercase">by Dark Art Studio</p>
+                  <span className="h-px w-8 sm:w-14 bg-amber-500/40" />
+                </div>
+                <p className="font-serif italic text-amber-100/65 text-sm sm:text-base mt-4 max-w-xl leading-relaxed">
+                  One to one conversation with something strange and beautiful. Choose a role play, set the depth,
+                  sign your name — and the hothouse will answer you by it.
+                </p>
+              </div>
+
+              <div className="relative z-10 mt-6 flex justify-center">
+                <span className="font-mono text-[10px] tracking-[0.35em] uppercase text-amber-300/55 border border-amber-500/25 rounded-full px-4 py-1.5">
+                  Everyday Grammar · Specimen No. VII
                 </span>
               </div>
             </div>
 
-            {/* Right side Designer badge - replaces Level 4 */}
-            <div className="flex items-center gap-2 text-xs sm:text-sm font-black tracking-[0.15em] text-cyan-300 bg-cyan-950/50 border border-cyan-500/40 rounded-full py-1.5 px-4.5 backdrop-blur-sm self-center md:absolute md:top-4 md:right-4 shadow-[0_0_15px_rgba(6,182,212,0.25)]">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span>
-              <span>By Joshimar Lavid</span>
+            <BotanicalDivider className="mt-6" />
+            <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-2 px-3 pt-3">
+              <p className="font-serif italic text-amber-100/55 text-xs sm:text-sm">
+                “Speak, and the hothouse answers in gold.”
+              </p>
+              <p className="font-mono text-[9px] uppercase tracking-[0.3em] text-amber-300/50">
+                By Joshimar Lavid · Dark Art Studio
+              </p>
             </div>
-
           </div>
         </header>
-
-        <div className="w-full bg-blue-900/20 border-b border-blue-900/50 py-2 text-center shadow-inner">
-          <p className="text-blue-200/80 text-base tracking-widest uppercase font-medium">
-            "Brought to you by EL TEACHER" This app has been designed for me to Help you practice anytime, anywhere" Who needs a friend when they have a teacher like this one?!" Lmao.
-          </p>
-        </div>
 
         <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
           {/* Daily Challenge Banner */}
@@ -1413,12 +1288,6 @@ export default function App() {
             </div>
           </motion.div>
 
-          {isGenerating && (
-            <div className="mb-8 p-4 glass-panel rounded-2xl flex items-center justify-center gap-3 text-blue-300/90">
-              <div className="w-4 h-4 border-2 border-blue-500/30 border-t-blue-500 rounded-full animate-spin" />
-              <span className="text-base font-medium tracking-widest uppercase font-mono">Summoning mythical depths...</span>
-            </div>
-          )}
         {error && (
           <motion.div 
             initial={{ opacity: 0, y: -10 }}
@@ -1436,7 +1305,7 @@ export default function App() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           {/* Configuration Panel */}
           <div className="lg:col-span-5 space-y-6">
-            <GothicSkullFlowerFrame title="Session Setup" icon={<Settings size={20} className={activeTheme.activeIconColor} />} theme={activeTheme}>
+            <GildedFrame title="The Ritual of Setup" icon={<Settings size={20} className={activeTheme.activeIconColor} />} theme={activeTheme}>
               
               <div className="space-y-5">
                 <div className="flex bg-zinc-900/80 p-1 rounded-xl mb-2 border border-zinc-800/50 overflow-x-auto custom-scrollbar gap-1">
@@ -1445,7 +1314,7 @@ export default function App() {
                     disabled={isConnected || isConnecting}
                     className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'student' ? 'bg-blue-500 text-black shadow-[0_0_12px_rgba(59,130,246,0.5)] border border-blue-400/50' : 'text-blue-300/60 hover:text-blue-200 hover:bg-blue-500/10'} disabled:opacity-50`}
                   >
-                    Student
+                    Role Play
                   </button>
                   <button
                     onClick={() => { playClick(); setMode('teacher'); }}
@@ -1491,18 +1360,6 @@ export default function App() {
 
                 {(mode === 'student' || mode === 'beginner') ? (
                   <>
-                    <div>
-                      <label className="block text-base font-bold tracking-widest uppercase text-blue-300/90 mb-2">Your Name</label>
-                      <input 
-                        type="text"
-                        value={studentName}
-                        onChange={(e) => setStudentName(e.target.value)}
-                        disabled={isSessionConnected || isSessionConnecting}
-                        placeholder="Enter your name..."
-                        className="w-full bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-5 py-4 outline-none focus:ring-2 focus:ring-blue-500/70 focus:border-blue-500 transition-all disabled:opacity-50 font-medium"
-                      />
-                    </div>
-
                     {/* Premium Voice Engine selection */}
                     <div className="p-4 bg-zinc-900/40 rounded-xl border border-blue-900/40 backdrop-blur-sm shadow-inner flex flex-col sm:flex-row items-center justify-between gap-3">
                       <div>
@@ -1534,10 +1391,18 @@ export default function App() {
                       </div>
                     </div>
 
+                    <div className="flex items-center gap-3">
+                      <span className="font-display text-sm text-amber-300/90 border border-amber-500/35 rounded-full w-9 h-9 flex items-center justify-center bg-black/50 shadow-[0_0_16px_rgba(201,162,75,0.18)]">I</span>
+                      <div>
+                        <p className="font-mono text-[10px] tracking-[0.35em] uppercase text-amber-300/55">First</p>
+                        <h3 className="gold-title text-sm tracking-[0.18em]">Choose your role play</h3>
+                      </div>
+                    </div>
+
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2">
-                        <label className="block text-base font-bold tracking-widest uppercase text-blue-300/90">
-                          {mode === 'beginner' ? 'Beginner Partner' : 'Role Play Partner'}
+                        <label className="block font-serif italic text-base text-amber-200/80">
+                          {mode === 'beginner' ? 'Everyday beginner partner' : 'Who shall receive you?'}
                         </label>
                         <span className="text-xs font-mono text-blue-300/60 font-bold bg-zinc-900 px-3 py-1 rounded-full border border-zinc-800/60">
                           {finalFilteredRoles.length} Available
@@ -1567,33 +1432,11 @@ export default function App() {
                           )}
                         </div>
 
-                        {/* Level Filter Tabs */}
-                        <div className="flex bg-black/40 p-1 rounded-xl border border-zinc-900 overflow-x-auto gap-1 custom-scrollbar">
-                          {(['all', 'A1', 'A2', 'B1_B2', 'C1'] as const).map((lvl) => {
-                            const labels = {
-                              all: 'All Levels',
-                              A1: 'A1',
-                              A2: 'A2',
-                              B1_B2: 'B1/B2',
-                              C1: 'C1'
-                            };
-                            return (
-                              <button
-                                key={lvl}
-                                type="button"
-                                disabled={isSessionConnected || isSessionConnecting}
-                                onClick={() => { playClick(); setSelectedLevelFilter(lvl); }}
-                                className={`flex-1 py-1.5 px-3 text-[11px] font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap ${
-                                  selectedLevelFilter === lvl 
-                                    ? 'bg-blue-500/25 text-blue-300 border border-blue-500/35 shadow-[0_0_8px_rgba(59,130,246,0.1)]' 
-                                    : 'text-zinc-500 hover:text-blue-400/80'
-                                } disabled:opacity-50`}
-                              >
-                                {labels[lvl]}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        <p className="font-serif italic text-xs text-amber-100/50 leading-relaxed">
+                          {mode === 'student'
+                            ? `The glass is filtered to ${activeDifficulty.name} specimens (${activeDifficulty.levels}).`
+                            : 'Gentle, everyday exchanges with visible translations.'}
+                        </p>
                       </div>
 
                       {/* Interactive Card List */}
@@ -1704,6 +1547,68 @@ export default function App() {
                           )}
                         </div>
                       )}
+
+                      {/* Step II — difficulty */}
+                      <div className="pt-3 space-y-3 border-t border-amber-500/15">
+                        <div className="flex items-center gap-3">
+                          <span className="font-display text-sm text-amber-300/90 border border-amber-500/35 rounded-full w-9 h-9 flex items-center justify-center bg-black/50 shadow-[0_0_16px_rgba(201,162,75,0.18)]">II</span>
+                          <div>
+                            <p className="font-mono text-[10px] tracking-[0.35em] uppercase text-amber-300/55">Second</p>
+                            <h3 className="gold-title text-sm tracking-[0.18em]">Set the difficulty</h3>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          {DIFFICULTIES.map(option => {
+                            const isActive = difficulty === option.id;
+                            return (
+                              <button
+                                key={option.id}
+                                type="button"
+                                disabled={isSessionConnected || isSessionConnecting}
+                                onClick={() => { playClick(); chooseDifficulty(option.id); }}
+                                className={`text-left p-3.5 rounded-2xl border transition-all disabled:opacity-50 ${
+                                  isActive
+                                    ? 'border-amber-400/60 bg-amber-500/10 shadow-[0_0_20px_rgba(201,162,75,0.18)] ring-1 ring-amber-400/25'
+                                    : 'border-zinc-800/70 bg-black/35 hover:border-amber-500/35 hover:bg-amber-950/15'
+                                }`}
+                              >
+                                <span className={`block font-display text-xs tracking-[0.18em] uppercase ${isActive ? 'text-amber-200' : 'text-amber-100/70'}`}>
+                                  {option.name}
+                                </span>
+                                <span className="block font-mono text-[10px] tracking-widest text-amber-300/60 mt-1">{option.levels}</span>
+                                <span className="block font-serif text-[11px] leading-snug text-amber-100/55 mt-1.5">{option.note}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Step III — name */}
+                      <div className="pt-3 space-y-2.5 border-t border-amber-500/15">
+                        <div className="flex items-center gap-3">
+                          <span className="font-display text-sm text-amber-300/90 border border-amber-500/35 rounded-full w-9 h-9 flex items-center justify-center bg-black/50 shadow-[0_0_16px_rgba(201,162,75,0.18)]">III</span>
+                          <div>
+                            <p className="font-mono text-[10px] tracking-[0.35em] uppercase text-amber-300/55">Third</p>
+                            <h3 className="gold-title text-sm tracking-[0.18em]">Sign your name</h3>
+                          </div>
+                        </div>
+
+                        <input
+                          type="text"
+                          value={studentName}
+                          onChange={(e) => setStudentName(e.target.value)}
+                          disabled={isSessionConnected || isSessionConnecting}
+                          placeholder="The name your partner will speak..."
+                          aria-label="Your name"
+                          className="velvet-input w-full rounded-xl px-5 py-3.5 outline-none transition-all disabled:opacity-50 font-serif text-lg tracking-wide placeholder:text-amber-300/25"
+                        />
+                        <p className="font-serif italic text-xs text-amber-100/55 leading-relaxed">
+                          {studentName.trim()
+                            ? `${selectedRole.name} will open the conversation by name, speaking to ${studentName.trim()} at ${activeDifficulty.name} depth.`
+                            : 'Sign here first — your partner cannot greet you until it knows what to call you.'}
+                        </p>
+                      </div>
                     </div>
                   </>
                 ) : mode === 'teacher' ? (
@@ -1905,13 +1810,13 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </GothicSkullFlowerFrame>
+            </GildedFrame>
           </div>
 
           {/* Active Session & Topic Panel */}
           <div className="lg:col-span-7 space-y-6">
             {mode === 'exercises' ? (
-              <GothicSkullFlowerFrame title="Grammar Exercises" icon={<Briefcase size={20} className={activeTheme.activeIconColor} />} theme={activeTheme}>
+              <GildedFrame title="Everyday Grammar Practice" icon={<Briefcase size={20} className={activeTheme.activeIconColor} />} theme={activeTheme}>
                 
                 {!isBookPurchased && exercisesCompleted >= 5 ? (
                   <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
@@ -2299,17 +2204,17 @@ export default function App() {
                     )}
                   </div>
                 )}
-              </GothicSkullFlowerFrame>
+              </GildedFrame>
             ) : mode === 'flashcards' ? (
-              <GothicSkullFlowerFrame title="Bilingual Study Spellbook" icon={<BookOpen size={20} className="text-indigo-400" />} theme={activeTheme}>
+              <GildedFrame title="The Spellbook" icon={<BookOpen size={20} className="text-indigo-400" />} theme={activeTheme}>
                 <InteractiveFlashcards 
                   theme={activeTheme} 
                   playClick={playClick} 
                   playReward={playReward} 
                 />
-              </GothicSkullFlowerFrame>
+              </GildedFrame>
             ) : mode === 'progress' ? (
-              <GothicSkullFlowerFrame title="Gothic Progress Ledger" icon={<Trophy size={20} className="text-red-500" />} theme={activeTheme}>
+              <GildedFrame title="The Ledger" icon={<Trophy size={20} className="text-red-500" />} theme={activeTheme}>
                 <div className="space-y-6">
                   {/* Download Progress Card & Study Guide */}
                   <div className="bg-gradient-to-r from-red-950/20 via-red-950/40 to-red-950/20 border border-red-900/40 rounded-xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-md">
@@ -2489,10 +2394,10 @@ export default function App() {
                     </div>
                   </div>
                 </div>
-              </GothicSkullFlowerFrame>
+              </GildedFrame>
             ) : (
-              <GothicSkullFlowerFrame 
-                title={isSessionConnected ? "Active Conversation" : "Learning Focus"}
+              <GildedFrame 
+                title={isSessionConnected ? "The Conversation" : "Specimen in Focus"}
                 icon={<Briefcase size={20} className={activeTheme.activeIconColor} />}
                 theme={activeTheme}
               >
@@ -2595,31 +2500,10 @@ export default function App() {
               <div className="mt-8 pt-6 border-t border-blue-900/50">
                 {!isSessionConnected ? (
                   <>
-                    {mode === 'student' && ROLES.findIndex(r => r.id === selectedRole.id) >= 5 && !isPremium ? (
-                      <div className="bg-blue-900/20 border border-blue-500/30 rounded-xl p-6 text-center">
-                        <Lock className="mx-auto mb-3 text-amber-500" size={32} />
-                        <h3 className="text-amber-400 font-bold tracking-widest uppercase mb-2">Premium Role Locked</h3>
-                        <p className="text-blue-300/90 text-base mb-4">You have reached the limit of 5 free roles. Pay for this role or buy the package to unlock all roles.</p>
-                        <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                          <button 
-                            onClick={() => setIsPremium(true)}
-                            className="bg-zinc-800 hover:bg-zinc-700 text-blue-200 border border-blue-500/30 px-6 py-3 rounded-xl font-bold tracking-widest uppercase text-base transition-all"
-                          >
-                            Unlock Role ($0.99)
-                          </button>
-                          <button 
-                            onClick={() => setIsPremium(true)}
-                            className="bg-amber-500 hover:bg-amber-400 text-black px-6 py-3 rounded-xl font-bold tracking-widest uppercase text-base transition-all shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-                          >
-                            Buy Package ($4.99)
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
                       <button
                         onClick={handleStart}
-                        disabled={isSessionConnecting || (mode === 'teacher' && !isPremium)}
-                        className="w-full flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-200 text-black py-4 rounded-2xl font-bold tracking-widest uppercase text-base transition-all disabled:opacity-70 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(6,182,212,0.4)] hover:shadow-[0_0_25px_rgba(6,182,212,0.6)] neon-border"
+                        disabled={isSessionConnecting || (mode === 'teacher' && !isPremium) || !studentName.trim()}
+                        className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-black py-4 rounded-2xl font-bold tracking-[0.25em] uppercase text-base transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_22px_rgba(201,162,75,0.35)] hover:shadow-[0_0_34px_rgba(232,201,124,0.5)] neon-border"
                       >
                         {isSessionConnecting ? (
                           <div className="flex items-center gap-2 font-mono text-sm">
@@ -2629,11 +2513,10 @@ export default function App() {
                         ) : (
                           <>
                             <Play size={20} />
-                            {mode === 'teacher' && !isPremium ? 'Teacher Mode Locked' : 'Start Conversation'}
+                            {mode === 'teacher' && !isPremium ? 'Teacher Mode Locked' : !studentName.trim() ? 'Sign your name first' : 'Begin the Conversation'}
                           </>
                         )}
                       </button>
-                    )}
                   </>
                 ) : (
                   <div className="flex flex-col items-center">
@@ -2810,7 +2693,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-            </GothicSkullFlowerFrame>
+            </GildedFrame>
             )}
            </div>
         </div>
