@@ -1,0 +1,17 @@
+{
+  "previewPort": 3000,
+  "healthPath": "/",
+  "startCommand": "docker compose -f docker-compose.base44.yml up -d",
+  "secrets": [
+    {
+      "name": "GEMINI_API_KEY",
+      "description": "Google Gemini API key from Google AI Studio (https://aistudio.google.com/apikey). Without it the AI endpoints answer 503 and the app falls back to offline content.",
+      "requiredAtBoot": false
+    },
+    {
+      "name": "ELEVEN_API_KEY",
+      "description": "ElevenLabs API key from https://elevenlabs.io/app/settings/api-keys. Without it text-to-speech responses report x-elevenlabs-missing and the UI stays silent.",
+      "requiredAtBoot": false
+    }
+  ]
+}

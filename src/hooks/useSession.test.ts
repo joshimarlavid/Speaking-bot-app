@@ -130,12 +130,6 @@ describe('useSession - SpeechRecognition handling', () => {
   });
 });
 
-describe("useSession - handleElevenMessage", () => {
-  const originalFetch = global.fetch;
-  const originalAudio = global.Audio;
-  const originalSpeechSynthesis = window.speechSynthesis;
-  const originalSpeechSynthesisUtterance = (window as any).SpeechSynthesisUtterance;
-  const originalCreateObjectURL = URL.createObjectURL;
 describe('useSession - triggerAIFeedback error and success paths', () => {
   const originalFetch = global.fetch;
 
@@ -145,22 +139,6 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
 
   afterEach(() => {
     global.fetch = originalFetch;
-    global.Audio = originalAudio;
-    window.speechSynthesis = originalSpeechSynthesis;
-    (window as any).SpeechSynthesisUtterance = originalSpeechSynthesisUtterance;
-    URL.createObjectURL = originalCreateObjectURL;
-  });
-
-  it("returns early without making a fetch call or updating loading state when text is empty", async () => {
-    const fetchMock = vi.fn();
-    global.fetch = fetchMock;
-
-    const { result } = renderHook(() =>
-      useSession(
-        "student",
-        { id: "role1", name: "Role 1", voice: "Puck", description: "A friendly partner" },
-        "Alice",
-        {},
     vi.restoreAllMocks();
   });
 
@@ -182,25 +160,6 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
     );
 
     await act(async () => {
-      await result.current.handleElevenMessage("");
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.current.elevenLabsLoading).toBe(false);
-    expect(result.current.elevenMessages).toEqual([]);
-  });
-
-  it("returns early without making a fetch call when text contains only whitespace", async () => {
-    const fetchMock = vi.fn();
-    global.fetch = fetchMock;
-
-    const { result } = renderHook(() =>
-      useSession(
-        "student",
-        { id: "role1", name: "Role 1", voice: "Puck", description: "A friendly partner" },
-        "Alice",
-        {},
-        {},
       await result.current.triggerAIFeedback([{ role: 'user', text: 'Can I have a coffee?' }]);
     });
 
@@ -230,42 +189,6 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
     );
 
     await act(async () => {
-      await result.current.handleElevenMessage("   \t\n  ");
-    });
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(result.current.elevenLabsLoading).toBe(false);
-    expect(result.current.elevenMessages).toEqual([]);
-  });
-
-  it("successfully processes non-empty text message with audio playback", async () => {
-    const playMock = vi.fn().mockResolvedValue(undefined);
-    class MockAudio {
-      src: string;
-      constructor(src: string) {
-        this.src = src;
-      }
-      play = playMock;
-    }
-    global.Audio = MockAudio as any;
-    URL.createObjectURL = vi.fn().mockReturnValue("blob:mock-audio-url");
-
-    const mockBlob = new Blob(["mock-audio"], { type: "audio/mpeg" });
-    const mockHeaders = new Headers({
-      "x-response-text": encodeURIComponent("Hello Alice! Nice to meet you."),
-    });
-
-    global.fetch = vi.fn().mockResolvedValue({
-      headers: mockHeaders,
-      blob: vi.fn().mockResolvedValue(mockBlob),
-    });
-
-    const { result } = renderHook(() =>
-      useSession(
-        "student",
-        { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
-        "Alice",
-        {},
       await result.current.triggerAIFeedback([{ role: 'user', text: 'I went to school.' }]);
     });
 
@@ -293,56 +216,6 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
     );
 
     await act(async () => {
-      await result.current.handleElevenMessage("Hi there!");
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith("/api/chat-roleplay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user_input: "Hi there!",
-        persona_prompt:
-          "You are playing the role of Sarah. A helpful guide. The user is the student Alice. Have a conversation with them and naturally encourage them to win. Maintain this character deeply. Keep your responses short, natural, and friendly (1-2 sentences).",
-        voice_id: "EXAVITQu4vr4xnSDxMaL",
-      }),
-    });
-
-    expect(result.current.elevenMessages).toEqual([
-      { role: "model", text: "Hello Alice! Nice to meet you." },
-    ]);
-    expect(result.current.elevenLabsLoading).toBe(false);
-    expect(playMock).toHaveBeenCalled();
-  });
-
-  it("handles speech synthesis fallback when elevenlabs is missing or error", async () => {
-    const mockSpeak = vi.fn();
-    window.speechSynthesis = {
-      speak: mockSpeak,
-    } as any;
-    class MockSpeechSynthesisUtterance {
-      text: string;
-      lang = "";
-      constructor(text: string) {
-        this.text = text;
-      }
-    }
-    (window as any).SpeechSynthesisUtterance = MockSpeechSynthesisUtterance as any;
-
-    const mockHeaders = new Headers({
-      "x-elevenlabs-missing": "true",
-    });
-
-    global.fetch = vi.fn().mockResolvedValue({
-      headers: mockHeaders,
-      json: vi.fn().mockResolvedValue({ text: "Fallback synthesized text" }),
-    });
-
-    const { result } = renderHook(() =>
-      useSession(
-        "student",
-        { id: "role1", name: "Sarah", voice: "Puck", description: "A helpful guide" },
-        "Alice",
-        {},
       await result.current.triggerAIFeedback([{ role: 'user', text: 'Hello' }]);
     });
 
@@ -400,17 +273,6 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
     );
 
     await act(async () => {
-      await result.current.handleElevenMessage("Test fallback");
-    });
-
-    expect(result.current.elevenWarning).toBe(
-      "Neural Voice fallback: Please configure ELEVEN_API_KEY to hear realistic characters."
-    );
-    expect(mockSpeak).toHaveBeenCalled();
-    expect(result.current.elevenMessages).toEqual([
-      { role: "model", text: "Fallback synthesized text" },
-    ]);
-    expect(result.current.elevenLabsLoading).toBe(false);
       await result.current.triggerAIFeedback([{ role: 'user', text: 'Hello' }]);
     });
 
@@ -419,5 +281,150 @@ describe('useSession - triggerAIFeedback error and success paths', () => {
       'Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.'
     );
     expect(consoleErrorSpy).toHaveBeenCalledWith('AI feedback generation error:', expect.any(Error));
+  });
+});
+
+describe('useSession - handleElevenMessage', () => {
+  const originalFetch = global.fetch;
+  const originalAudio = global.Audio;
+  const originalSpeechSynthesis = window.speechSynthesis;
+  const originalSpeechSynthesisUtterance = (window as any).SpeechSynthesisUtterance;
+  const originalCreateObjectURL = URL.createObjectURL;
+
+  const renderSession = () =>
+    renderHook(() =>
+      useSession(
+        'student',
+        { id: 'role1', name: 'Sarah', voice: 'Puck', description: 'A helpful guide' },
+        'Alice',
+        {},
+        {},
+        null
+      )
+    );
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    global.Audio = originalAudio;
+    window.speechSynthesis = originalSpeechSynthesis;
+    (window as any).SpeechSynthesisUtterance = originalSpeechSynthesisUtterance;
+    URL.createObjectURL = originalCreateObjectURL;
+  });
+
+  it('returns early without fetching or updating loading state when text is empty', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    const { result } = renderSession();
+
+    await act(async () => {
+      await result.current.handleElevenMessage('');
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(result.current.elevenMessages).toEqual([]);
+  });
+
+  it('returns early when text contains only whitespace', async () => {
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock;
+
+    const { result } = renderSession();
+
+    await act(async () => {
+      await result.current.handleElevenMessage('   \t\n  ');
+    });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(result.current.elevenMessages).toEqual([]);
+  });
+
+  it('processes a non-empty message and plays the returned audio', async () => {
+    const playMock = vi.fn().mockResolvedValue(undefined);
+    class MockAudio {
+      src: string;
+      constructor(src: string) {
+        this.src = src;
+      }
+      play = playMock;
+    }
+    global.Audio = MockAudio as any;
+    URL.createObjectURL = vi.fn().mockReturnValue('blob:mock-audio-url');
+
+    const mockBlob = new Blob(['mock-audio'], { type: 'audio/mpeg' });
+    const mockHeaders = new Headers({
+      'x-response-text': encodeURIComponent('Hello Alice! Nice to meet you.'),
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      headers: mockHeaders,
+      blob: vi.fn().mockResolvedValue(mockBlob),
+    });
+
+    const { result } = renderSession();
+
+    await act(async () => {
+      await result.current.handleElevenMessage('Hi there!');
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/chat-roleplay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_input: 'Hi there!',
+        persona_prompt:
+          'You are playing the role of Sarah. A helpful guide. The user is the student Alice. Have a conversation with them and naturally encourage them to win. Maintain this character deeply. Keep your responses short, natural, and friendly (1-2 sentences).',
+        voice_id: 'EXAVITQu4vr4xnSDxMaL',
+      }),
+    });
+
+    expect(result.current.elevenMessages).toEqual([
+      { role: 'model', text: 'Hello Alice! Nice to meet you.' },
+    ]);
+    expect(result.current.elevenLabsLoading).toBe(false);
+    expect(playMock).toHaveBeenCalled();
+  });
+
+  it('falls back to speech synthesis when ElevenLabs is unavailable', async () => {
+    const speakMock = vi.fn();
+    window.speechSynthesis = { speak: speakMock } as any;
+    class MockSpeechSynthesisUtterance {
+      text: string;
+      lang = '';
+      constructor(text: string) {
+        this.text = text;
+      }
+    }
+    (window as any).SpeechSynthesisUtterance = MockSpeechSynthesisUtterance as any;
+
+    const mockHeaders = new Headers({
+      'x-elevenlabs-missing': 'true',
+    });
+
+    global.fetch = vi.fn().mockResolvedValue({
+      headers: mockHeaders,
+      json: vi.fn().mockResolvedValue({ text: 'Fallback synthesized text' }),
+    });
+
+    const { result } = renderSession();
+
+    await act(async () => {
+      await result.current.handleElevenMessage('Test fallback');
+    });
+
+    expect(result.current.elevenWarning).toBe(
+      'Neural Voice fallback: Please configure ELEVEN_API_KEY to hear realistic characters.'
+    );
+    expect(speakMock).toHaveBeenCalled();
+    expect(result.current.elevenMessages).toEqual([
+      { role: 'model', text: 'Fallback synthesized text' },
+    ]);
+    expect(result.current.elevenLabsLoading).toBe(false);
   });
 });
