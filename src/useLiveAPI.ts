@@ -1,7 +1,4 @@
 import { useState, useRef, useCallback } from 'react';
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
-import { Role, Topic } from './types';
-import { float32ToPcm16Base64, base64ToFloat32 } from './utils/audio';
 
 export function useLiveAPI() {
   const [isConnected, setIsConnected] = useState(false);
@@ -10,34 +7,87 @@ export function useLiveAPI() {
   const [userTranscript, setUserTranscript] = useState<string>("");
   const [aiTranscript, setAiTranscript] = useState<string>("");
   const [hasMicrophone, setHasMicrophone] = useState(true);
-  
-  const sessionRef = useRef<any>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const disconnect = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
+    if (wsRef.current) {
+      try {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onerror = null;
+        wsRef.current.onclose = null;
+        if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
+          wsRef.current.close();
+        }
+      } catch {
+        // Ignore close errors
+      }
+      wsRef.current = null;
+    }
+
+    if (processorRef.current) {
+      try {
+        processorRef.current.disconnect();
+      } catch {
+        // Ignore disconnect errors
+      }
+      processorRef.current = null;
+    }
+
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    if (inputAudioContextRef.current) {
+      try {
+        inputAudioContextRef.current.close();
+      } catch {
+        // Ignore close errors
+      }
+      inputAudioContextRef.current = null;
+    }
+
+    if (outputAudioContextRef.current) {
+      try {
+        outputAudioContextRef.current.close();
+      } catch {
+        // Ignore close errors
+      }
+      outputAudioContextRef.current = null;
+    }
+
+    nextPlayTimeRef.current = 0;
+    setIsConnected(false);
+    setIsConnecting(false);
+  }, []);
+
   const connect = useCallback(async (
     studentName: string,
-    role: Role | null,
-    topic: Topic,
+    role: any,
+    topic: any,
     mode: 'student' | 'teacher' = 'student',
     challenge?: { type: string, content: string }
   ) => {
+    disconnect();
     setIsConnecting(true);
     setError(null);
     setUserTranscript("");
     setAiTranscript("");
 
     try {
-            const ai = new GoogleGenAI({
-        apiKey: 'proxy', // Dummy key to pass validation; actual key is appended by proxy
-        httpOptions: {
-          baseUrl: window.location.protocol + '//' + window.location.host + '/api/gemini'
-        }
-      });
-      
       let challengeInstruction = "";
       if (challenge) {
         challengeInstruction = `\n\nDAILY CHALLENGE: The user is also trying to use the following ${challenge.type}: "${challenge.content}". 
@@ -96,266 +146,198 @@ Please format your feedback EXACTLY using the following Markdown structure:
 | :--- | :--- | :--- |
 | [Quote the mistake] | [Provide the correct structure] | [Brief explanation of the language focus] |`;
 
-      const sessionPromise = ai.live.connect({
-        model: "gemini-3.1-flash-live-preview",
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: mode === 'teacher' ? 'Puck' : role.voice } },
-          },
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/live`);
+      wsRef.current = ws;
+
+      const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      outputAudioContextRef.current = outputCtx;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          type: 'setup',
+          voiceName: mode === 'teacher' ? 'Puck' : (role?.voice || 'Zephyr'),
           systemInstruction,
-          outputAudioTranscription: {},
-          inputAudioTranscription: {},
-        },
-        callbacks: {
-          onopen: async () => {
+        }));
+      };
+
+      ws.onmessage = async (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === 'connected') {
             setIsConnected(true);
             setIsConnecting(false);
-            
-            // Send initial trigger so AI starts the conversation
-            sessionPromise.then((session) => {
-              try {
-                let initMessage = "";
-                if (mode === "teacher") {
-                  initMessage = `Greeting trigger: Hi ${studentName || "there"}! Please introduce the topic "${topic?.title || "English grammar"}" and ask me a short diagnostic question to start our practice.`;
-                } else {
-                  initMessage = `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. Greet me warmly as the student named ${studentName} inside your character's persona and context. Introduce yourself very briefly in exactly 1-2 short sentences to start our conversation!`;
-                }
-                session.sendRealtimeInput({
-                  text: initMessage
-                });
-              } catch (e) {
-                console.error("Failed to send initial greeting trigger:", e);
-              }
-            });
 
-            // Start audio capture
+            const initMessage = mode === "teacher"
+              ? `Greeting trigger: Hi ${studentName || "there"}! Please introduce the topic "${topic?.title || "English grammar"}" and ask me a short diagnostic question to start our practice.`
+              : `Greeting trigger: You are playing the role of ${role?.name || "Partner"}. Greet me warmly as the student named ${studentName} inside your character's persona and context. Introduce yourself very briefly in exactly 1-2 short sentences to start our conversation!`;
+
+            ws.send(JSON.stringify({ type: 'text', text: initMessage }));
+
+            // Start microphone audio capture at 16kHz
             try {
-              const audioContext = new AudioContext({ sampleRate: 16000 });
-              audioContextRef.current = audioContext;
-              
-              const stream = await navigator.mediaDevices.getUserMedia({ 
+              const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+              inputAudioContextRef.current = inputCtx;
+
+              const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                   echoCancellation: true,
                   noiseSuppression: true,
-                  autoGainControl: true
-                } 
+                  autoGainControl: true,
+                },
               });
               streamRef.current = stream;
               setHasMicrophone(true);
-              
-              const source = audioContext.createMediaStreamSource(stream);
-              const processor = audioContext.createScriptProcessor(2048, 1, 1);
+
+              const source = inputCtx.createMediaStreamSource(stream);
+              const processor = inputCtx.createScriptProcessor(2048, 1, 1);
               processorRef.current = processor;
-              
+
               source.connect(processor);
-              
-              // Create a gain node set to 0 to keep the processor active without echoing
-              const gainNode = audioContext.createGain();
+
+              const gainNode = inputCtx.createGain();
               gainNode.gain.value = 0;
               processor.connect(gainNode);
-              gainNode.connect(audioContext.destination);
-              
+              gainNode.connect(inputCtx.destination);
+
               processor.onaudioprocess = (e) => {
+                if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+
                 const inputData = e.inputBuffer.getChannelData(0);
-                const base64 = float32ToPcm16Base64(inputData);
-                
-                if (sessionRef.current) {
-                  try {
-                    sessionRef.current.sendRealtimeInput({
-                      audio: {
-                        mimeType: 'audio/pcm;rate=16000',
-                        data: base64
-                      }
-                    });
-                  } catch (err) {
-                    console.error("Error sending realtime audio direct:", err);
-                  }
-                } else {
-                  sessionPromise.then((session) => {
-                    try {
-                      session.sendRealtimeInput({
-                        audio: {
-                          mimeType: 'audio/pcm;rate=16000',
-                          data: base64
-                        }
-                      });
-                    } catch (err) {
-                      console.error("Error sending realtime audio via promise:", err);
-                    }
-                  });
+                const pcm16 = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                  pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+                }
+                const buffer = new ArrayBuffer(pcm16.length * 2);
+                const view = new DataView(buffer);
+                for (let i = 0; i < pcm16.length; i++) {
+                  view.setInt16(i * 2, pcm16[i], true);
+                }
+                const uint8 = new Uint8Array(buffer);
+                let binary = "";
+                for (let i = 0; i < uint8.length; i++) {
+                  binary += String.fromCharCode(uint8[i]);
+                }
+                const base64 = btoa(binary);
+
+                try {
+                  wsRef.current.send(JSON.stringify({ type: 'audio', data: base64 }));
+                } catch {
+                  // Ignore transient socket send error
                 }
               };
-
-              // 3-minute feedback timer
-              timerRef.current = setTimeout(() => {
-                sessionPromise.then((session) => {
-                  try {
-                    session.sendRealtimeInput({
-                      text: "3 minutes have passed. Please break character and provide friendly, empathetic, and constructive feedback. Praise the student first. Then, provide specific examples of their mistakes and how to correct them, focusing on only 1-2 key areas for improvement."
-                    });
-                    setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
-                  } catch (e) {
-                    console.error("Failed to send feedback prompt", e);
-                  }
-                });
-              }, 3 * 60 * 1000); // 3 minutes
-
-            } catch (err: unknown) {
-              console.warn("Microphone not found, falling back to text mode:", err);
+            } catch (micErr) {
+              console.warn("Microphone not available, continuing in text mode:", micErr);
               setHasMicrophone(false);
-              // Do not disconnect, allow text mode
             }
-          },
-          onmessage: (message: LiveServerMessage) => {
-            if (message.serverContent?.interrupted) {
-              // Clear audio queue if interrupted
-              if (audioContextRef.current) {
-                nextPlayTimeRef.current = audioContextRef.current.currentTime;
+
+            // 3-minute feedback timer
+            timerRef.current = setTimeout(() => {
+              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.send(JSON.stringify({
+                  type: 'text',
+                  text: "3 minutes have passed. Please break character and provide friendly, empathetic, and constructive feedback. Praise the student first. Then, provide specific examples of their mistakes and how to correct them, focusing on only 1-2 key areas for improvement."
+                }));
+                setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
               }
-            }
+            }, 3 * 60 * 1000);
+            return;
+          }
 
-            // Handle Transcriptions
-            // @ts-ignore
-            if (message.serverContent?.modelTurn?.parts) {
-              // @ts-ignore
-              for (const part of message.serverContent.modelTurn.parts) {
-                if (part.text) {
-                  setAiTranscript(prev => prev + part.text);
-                }
+          if (msg.type === 'interrupted') {
+            if (outputAudioContextRef.current) {
+              nextPlayTimeRef.current = outputAudioContextRef.current.currentTime;
+            }
+            return;
+          }
+
+          if (msg.type === 'inputTranscript' && msg.text) {
+            if (!msg.text.includes("Greeting trigger:")) {
+              setUserTranscript(prev => (prev ? prev + " " + msg.text : msg.text));
+            }
+            return;
+          }
+
+          if ((msg.type === 'outputTranscript' || msg.type === 'text') && msg.text) {
+            setAiTranscript(prev => prev + msg.text);
+            return;
+          }
+
+          if (msg.type === 'audio' && msg.data && outputAudioContextRef.current) {
+            try {
+              const audioCtx = outputAudioContextRef.current;
+              if (audioCtx.state === 'suspended') {
+                await audioCtx.resume();
               }
-            }
-            
-            // @ts-ignore
-            if (message.clientContent?.turnComplete) {
-              // Sometimes input transcription comes differently, but we'll try to catch what we can
-            }
-            
-            // @ts-ignore
-            if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
-              // This is audio
-            }
 
-            // @ts-ignore
-            if (message.clientContent?.turnComplete) {
-              // Not reliable for text
-            }
-
-            // @ts-ignore
-            if (message.serverContent?.turnComplete) {
-              // Turn complete
-            }
-
-            // Let's check for inputTranscription and outputTranscription as per docs
-            // @ts-ignore
-            if (message.serverContent?.modelTurn?.parts) {
-               // already handled above
-            }
-            
-            // @ts-ignore
-            if (message.serverContent?.clientContent?.turns) {
-              // @ts-ignore
-              for (const turn of message.serverContent.clientContent.turns) {
-                for (const part of turn.parts) {
-                  if (part.text && !part.text.includes("Greeting trigger:")) {
-                    setUserTranscript(prev => prev + " " + part.text);
-                  }
-                }
+              const binaryString = atob(msg.data);
+              const bytes = new Uint8Array(binaryString.length);
+              for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
               }
-            }
-
-            // @ts-ignore
-            if (message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data) {
-              const base64Audio = message.serverContent.modelTurn.parts[0].inlineData.data;
-              if (audioContextRef.current) {
-                try {
-                const audioContext = audioContextRef.current;
-                const float32 = base64ToFloat32(base64Audio);
-                
-                const audioBuffer = audioContext.createBuffer(1, float32.length, 24000);
-                audioBuffer.getChannelData(0).set(float32);
-                
-                const source = audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(audioContext.destination);
-                
-                const currentTime = audioContext.currentTime;
-                if (nextPlayTimeRef.current < currentTime) {
-                  nextPlayTimeRef.current = currentTime;
-                }
-                
-                source.start(nextPlayTimeRef.current);
-                nextPlayTimeRef.current += audioBuffer.duration;
-              } catch (e) {
-                console.error("Error playing audio chunk", e);
+              const pcm16 = new Int16Array(bytes.buffer);
+              const float32 = new Float32Array(pcm16.length);
+              for (let i = 0; i < pcm16.length; i++) {
+                float32[i] = pcm16[i] / 32768;
               }
+
+              const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
+              audioBuffer.getChannelData(0).set(float32);
+
+              const source = audioCtx.createBufferSource();
+              source.buffer = audioBuffer;
+              source.connect(audioCtx.destination);
+
+              const currentTime = audioCtx.currentTime;
+              if (nextPlayTimeRef.current < currentTime) {
+                nextPlayTimeRef.current = currentTime;
+              }
+
+              source.start(nextPlayTimeRef.current);
+              nextPlayTimeRef.current += audioBuffer.duration;
+            } catch (playErr) {
+              console.error("Error playing 24kHz audio chunk:", playErr);
             }
-            }
-          },
-          onerror: (err) => {
-            console.error("Live API Error:", err);
-            setError("Connection error occurred.");
+            return;
+          }
+
+          if (msg.type === 'error') {
+            setError(msg.message || "Live API connection error.");
             disconnect();
-          },
-          onclose: () => {
+            return;
+          }
+
+          if (msg.type === 'closed') {
             disconnect();
           }
+        } catch (parseErr) {
+          console.error("Error handling Live API message:", parseErr);
         }
-      });
-      
-      sessionRef.current = await sessionPromise;
-      
-    } catch (err: unknown) {
+      };
+
+      ws.onerror = () => {
+        setError("Unable to establish Live API voice connection. Please try again.");
+        disconnect();
+      };
+
+      ws.onclose = () => {
+        disconnect();
+      };
+    } catch (err: any) {
       console.error("Failed to connect:", err);
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      setError(errorMessage || "Failed to connect to Live API");
+      setError(err.message || "Failed to connect to Live API");
       setIsConnecting(false);
     }
-  }, []);
-
-  const disconnect = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (sessionRef.current) {
-      // The SDK might not have a public close method, but we can try
-      try {
-        // @ts-ignore
-        if (typeof sessionRef.current.close === 'function') {
-          // @ts-ignore
-          sessionRef.current.close();
-        }
-      } catch (e) {}
-      sessionRef.current = null;
-    }
-    
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
-    }
-    
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
-    setIsConnected(false);
-    setIsConnecting(false);
-  }, []);
+  }, [disconnect]);
 
   const requestFeedback = useCallback(() => {
-    if (sessionRef.current) {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
-        sessionRef.current.sendRealtimeInput({
+        wsRef.current.send(JSON.stringify({
+          type: 'text',
           text: "Please break character and provide friendly, empathetic, and constructive feedback. Praise the student first. Then, provide specific examples of their mistakes and how to correct them, focusing on only 1-2 key areas for improvement."
-        });
+        }));
         setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
       } catch (e) {
         console.error("Failed to request feedback", e);
@@ -364,12 +346,13 @@ Please format your feedback EXACTLY using the following Markdown structure:
   }, []);
 
   const sendTextMessage = useCallback((text: string) => {
-    if (sessionRef.current) {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
-        sessionRef.current.sendRealtimeInput({
-          text
-        });
-        setUserTranscript(prev => prev + " " + text);
+        wsRef.current.send(JSON.stringify({
+          type: 'text',
+          text,
+        }));
+        setUserTranscript(prev => (prev ? prev + " " + text : text));
       } catch (e) {
         console.error("Failed to send text message", e);
       }

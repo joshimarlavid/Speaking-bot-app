@@ -18,10 +18,46 @@ if (!process.env.ELEVEN_API_KEY?.startsWith("sk_")) {
 }
 
 import express from "express";
+import http from "http";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { WebSocketServer, WebSocket } from "ws";
+
+function createGeminiClient(apiKey: string) {
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
+function pcmToWavBuffer(pcmBuffer: Buffer, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmBuffer.length;
+  const header = Buffer.alloc(44);
+
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + dataSize, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16); // Subchunk1Size (16 for PCM)
+  header.writeUInt16LE(1, 20);  // AudioFormat (1 for PCM)
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(dataSize, 40);
+
+  return Buffer.concat([header, pcmBuffer]);
+}
 
 const OFFLINE_DICTIONARY: Record<string, {
   definitionEn: string;
@@ -289,22 +325,11 @@ function buildPromptGuard(label: string, value: string) {
 
 async function startServer() {
   const app = express();
+  const server = http.createServer(app);
   const PORT = 3000;
 
   // Use JSON middleware for POST requests
   app.use(express.json({ limit: "1mb" }));
-
-  app.use('/api', (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const origin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
-    const expectedOrigin = `${req.protocol}://${req.headers.host || 'localhost'}`;
-
-    if (origin && origin !== expectedOrigin) {
-      res.status(403).json({ error: "Access denied. Cross-origin API access is not allowed." });
-      return;
-    }
-
-    next();
-  });
 
   // Rate limiter for proxy requests
   const proxyRateLimitMap = new Map<string, { count: number; resetTime: number }>();
@@ -367,7 +392,7 @@ async function startServer() {
     next();
   });
 
-  // Proxy for Gemini WebSocket / Live API (for useLiveAPI.ts)
+  // Proxy for Gemini WebSocket / Live API
   app.use('/api/gemini', createProxyMiddleware({
     target: 'https://generativelanguage.googleapis.com',
     changeOrigin: true,
@@ -375,7 +400,7 @@ async function startServer() {
     pathRewrite: {
       '^/api/gemini': '', // remove base path
     },
-    onProxyReq: (proxyReq: any, req: any, res: any) => {
+    onProxyReq: (proxyReq: any) => {
       if (process.env.GEMINI_API_KEY) {
         if (!proxyReq.path.includes('key=')) {
           const sep = proxyReq.path.includes('?') ? '&' : '?';
@@ -383,7 +408,7 @@ async function startServer() {
         }
       }
     },
-    onProxyReqWs: (proxyReq: any, req: any, socket: any, options: any, head: any) => {
+    onProxyReqWs: (proxyReq: any) => {
       if (process.env.GEMINI_API_KEY) {
         if (!proxyReq.path.includes('key=')) {
           const sep = proxyReq.path.includes('?') ? '&' : '?';
@@ -393,6 +418,154 @@ async function startServer() {
     }
   } as any));
 
+  // Server-side WebSocket bridge for Gemini Live API (/api/live)
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on("upgrade", (request, socket, head) => {
+    const pathname = request.url?.split("?")[0] || "";
+    if (pathname === "/api/live") {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    }
+  });
+
+  wss.on("connection", (clientWs: WebSocket) => {
+    let liveSession: any = null;
+    let sessionPromise: Promise<any> | null = null;
+    let isClosed = false;
+
+    const sendSafe = (payload: any) => {
+      if (!isClosed && clientWs.readyState === WebSocket.OPEN) {
+        clientWs.send(JSON.stringify(payload));
+      }
+    };
+
+    clientWs.on("message", async (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+
+        if (msg.type === "setup") {
+          const geminiKey = process.env.GEMINI_API_KEY;
+          if (!geminiKey || geminiKey.trim().length < 5) {
+            sendSafe({ type: "error", message: "Gemini API key is not configured on the server." });
+            return;
+          }
+
+          const validVoices = ["Puck", "Charon", "Kore", "Fenrir", "Zephyr", "Aoede"];
+          const requestedVoice = typeof msg.voiceName === "string" && validVoices.includes(msg.voiceName)
+            ? msg.voiceName
+            : "Zephyr";
+          const systemInstruction = typeof msg.systemInstruction === "string"
+            ? msg.systemInstruction
+            : "You are a helpful English conversation partner.";
+
+          const ai = createGeminiClient(geminiKey);
+
+          sessionPromise = ai.live.connect({
+            model: "gemini-3.8-live",
+            config: {
+              responseModalities: [Modality.AUDIO],
+              speechConfig: {
+                voiceConfig: { prebuiltVoiceConfig: { voiceName: requestedVoice } },
+              },
+              systemInstruction,
+              outputAudioTranscription: {},
+              inputAudioTranscription: {},
+            },
+            callbacks: {
+              onopen: () => {
+                sendSafe({ type: "connected" });
+              },
+              onmessage: (message: LiveServerMessage) => {
+                const content = message.serverContent;
+                if (!content) return;
+
+                if (content.interrupted) {
+                  sendSafe({ type: "interrupted" });
+                }
+
+                if (content.inputTranscription?.text) {
+                  sendSafe({ type: "inputTranscript", text: content.inputTranscription.text });
+                }
+
+                if (content.outputTranscription?.text) {
+                  sendSafe({ type: "outputTranscript", text: content.outputTranscription.text });
+                }
+
+                for (const part of content.modelTurn?.parts ?? []) {
+                  if (part.inlineData?.data) {
+                    sendSafe({ type: "audio", data: part.inlineData.data });
+                  }
+                  if (part.text) {
+                    sendSafe({ type: "text", text: part.text });
+                  }
+                }
+              },
+              onerror: (err: any) => {
+                console.error("Gemini Live Session Error:", err);
+                sendSafe({ type: "error", message: err?.message || "Live API connection error" });
+              },
+              onclose: () => {
+                sendSafe({ type: "closed" });
+              },
+            },
+          });
+
+          try {
+            liveSession = await sessionPromise;
+            if (isClosed && liveSession && typeof liveSession.close === "function") {
+              liveSession.close();
+            }
+          } catch (connectErr: any) {
+            console.error("Failed to establish Gemini Live session:", connectErr);
+            sendSafe({ type: "error", message: connectErr?.message || "Failed to connect to Gemini Live" });
+          }
+          return;
+        }
+
+        const activeSession = liveSession || (sessionPromise ? await sessionPromise.catch(() => null) : null);
+        if (!activeSession) return;
+
+        if (msg.type === "audio" && typeof msg.data === "string") {
+          activeSession.sendRealtimeInput({
+            audio: {
+              mimeType: "audio/pcm;rate=16000",
+              data: msg.data,
+            },
+          });
+        } else if (msg.type === "text" && typeof msg.text === "string") {
+          activeSession.sendRealtimeInput({
+            text: msg.text,
+          });
+        }
+      } catch (err) {
+        console.error("Error handling WebSocket client message:", err);
+      }
+    });
+
+    clientWs.on("close", () => {
+      isClosed = true;
+      if (liveSession && typeof liveSession.close === "function") {
+        try {
+          liveSession.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+    });
+
+    clientWs.on("error", () => {
+      isClosed = true;
+      if (liveSession && typeof liveSession.close === "function") {
+        try {
+          liveSession.close();
+        } catch {
+          // Ignore close errors
+        }
+      }
+    });
+  });
 
   // Helper to generate offline simulated dialogue responses when API key is missing/invalid
   function getOfflineRoleplayResponse(userInput: string, personaPrompt: string): string {
@@ -447,8 +620,6 @@ async function startServer() {
     return "That sounds very interesting! As your roleplay partner, I am glad you mentioned that. Let's keep practicing our target words!";
   }
 
-  // API route for Chat Roleplay with ElevenLabs Streaming
-
   // Helper to safely invoke Gemini text models with automatic modern model fallback
   async function generateGeminiText(ai: GoogleGenAI, contents: any, config?: any) {
     const candidateModels = ["gemini-3.8-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
@@ -456,7 +627,7 @@ async function startServer() {
     for (const model of candidateModels) {
       try {
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("Timeout generating content")), 5000)
+          setTimeout(() => reject(new Error("Timeout generating content")), 8000)
         );
         const resPromise = ai.models.generateContent({
           model,
@@ -472,26 +643,58 @@ async function startServer() {
     throw lastError;
   }
 
+  // Helper to synthesize WAV audio via Gemini TTS when ElevenLabs is not configured
+  async function generateGeminiTtsWav(ai: GoogleGenAI, text: string, voiceName = "Kore"): Promise<Buffer | null> {
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-3.8-flash-lite-tts",
+        contents: [{ parts: [{ text }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName },
+            },
+          },
+        },
+      });
+      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!base64Audio) return null;
+      const pcmBuf = Buffer.from(base64Audio, "base64");
+      return pcmToWavBuffer(pcmBuf, 24000, 1, 16);
+    } catch {
+      return null;
+    }
+  }
+
   // API route for generating grammar exercise
   app.post("/api/generate-exercise", async (req: express.Request, res: express.Response) => {
+    const safeTopicTitle = sanitizePromptText(req.body?.randomTopic?.title, 120);
+    const safeGrammar = sanitizePromptText(req.body?.randomTopic?.grammar, 200);
+    const safeVocabulary = Array.isArray(req.body?.randomTopic?.vocabulary)
+      ? req.body.randomTopic.vocabulary
+          .map((entry: unknown) => sanitizePromptText(entry, 40))
+          .filter((entry: string) => entry.length > 0)
+          .slice(0, 12)
+      : [];
+
+    const fallbackExercise = {
+      topic: safeTopicTitle || "Conversational English",
+      question: `When you arrive at the counter, please ask the ____ for your receipt.`,
+      options: ["cashier", "aisle", "symptom", "luggage"],
+      answer: 0,
+      explanation: `A "cashier" is the person who processes payments and gives you a receipt at the checkout counter.`,
+      pronunciation: "/kæˈʃɪr/ (cash-EER)"
+    };
+
     try {
-      const { randomTopic } = req.body;
       const geminiKey = process.env.GEMINI_API_KEY;
       if (!geminiKey || geminiKey.trim().length < 10) {
-        res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY" });
+        res.status(200).json(fallbackExercise);
         return;
       }
 
-      const safeTopicTitle = sanitizePromptText(randomTopic?.title, 120);
-      const safeGrammar = sanitizePromptText(randomTopic?.grammar, 200);
-      const safeVocabulary = Array.isArray(randomTopic?.vocabulary)
-        ? randomTopic.vocabulary
-            .map((entry: unknown) => sanitizePromptText(entry, 40))
-            .filter((entry) => entry.length > 0)
-            .slice(0, 12)
-        : [];
-
-      const ai = new GoogleGenAI({ apiKey: geminiKey });
+      const ai = createGeminiClient(geminiKey);
 
       const prompt = `Create a new English grammar exercise for the topic: ${safeTopicTitle || "general practice"}.
       Grammar: ${safeGrammar || "general English practice"}.
@@ -521,12 +724,10 @@ async function startServer() {
         const parsed = JSON.parse(cleaned);
         res.status(200).json(parsed);
       } catch (e) {
-        console.error("Failed to parse JSON response:", text);
-        res.status(500).json({ error: "Failed to generate exercise" });
+        res.status(200).json(fallbackExercise);
       }
     } catch (e) {
-      console.error("Error generating exercise:", e);
-      res.status(500).json({ error: "Failed to generate exercise" });
+      res.status(200).json(fallbackExercise);
     }
   });
 
@@ -552,20 +753,19 @@ async function startServer() {
       const geminiKey = process.env.GEMINI_API_KEY;
       const isKeyValid = geminiKey && geminiKey.trim().length > 10;
       let text_response = "";
+      let aiClient: GoogleGenAI | null = null;
 
       if (!isKeyValid) {
-        // Safe offline simulated dialogue to guarantee zero crashes on empty/temp keys
         text_response = getOfflineRoleplayResponse(safeUserInput, safePersonaPrompt);
       } else {
         try {
-          const ai = new GoogleGenAI({ apiKey: geminiKey });
+          aiClient = createGeminiClient(geminiKey);
           const promptGuard = buildPromptGuard("persona instructions", safePersonaPrompt);
-          const geminiResponse = await generateGeminiText(ai, `Usuario: ${safeUserInput}\nRespuesta:`, {
+          const geminiResponse = await generateGeminiText(aiClient, `Usuario: ${safeUserInput}\nRespuesta:`, {
             systemInstruction: promptGuard
           });
-          text_response = geminiResponse.text || "";
+          text_response = geminiResponse.text || getOfflineRoleplayResponse(safeUserInput, safePersonaPrompt);
         } catch (apiErr) {
-          // Fall back seamlessly to local dialogue simulation
           text_response = getOfflineRoleplayResponse(safeUserInput, safePersonaPrompt);
         }
       }
@@ -574,78 +774,76 @@ async function startServer() {
       res.setHeader("x-response-text", encodeURIComponent(text_response));
 
       const elevenApiKey = process.env.ELEVEN_API_KEY;
-      const defaultVoiceId = "EXAVITQu4vr4xnSDxMaL"; // Default Sarah voice ID (supported across all tiers)
+      const defaultVoiceId = "EXAVITQu4vr4xnSDxMaL"; // Default Sarah voice ID
       const isValidVoiceId =
         typeof safeVoiceId === "string" &&
         /^[A-Za-z0-9]{20,64}$/.test(safeVoiceId);
       const targetVoice = isValidVoiceId ? safeVoiceId : defaultVoiceId;
 
-      // Only attempt ElevenLabs if key is present and is an actual API key (starts with sk_)
       const isElevenKeyValid = typeof elevenApiKey === "string" && elevenApiKey.startsWith("sk_") && elevenApiKey.length > 20;
 
-      if (!isElevenKeyValid) {
-        // Return JSON with text response and browser synthesis indicator
-        res.setHeader("x-elevenlabs-missing", "true");
-        res.status(200).json({ 
-          text: text_response, 
-          warning: "ElevenLabs API key not configured or format invalid (keys must start with 'sk_'). Using browser speech synthesis fallback." 
-        });
-        return;
-      }
+      if (isElevenKeyValid) {
+        try {
+          const elevenResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(targetVoice)}/stream`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "xi-api-key": elevenApiKey,
+            },
+            body: JSON.stringify({
+              text: text_response,
+              model_id: "eleven_multilingual_v2",
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+              },
+            }),
+          });
 
-      // 2. La voz: ElevenLabs generates audio in real time
-      const elevenResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(targetVoice)}/stream`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "xi-api-key": elevenApiKey,
-        },
-        body: JSON.stringify({
-          text: text_response,
-          model_id: "eleven_multilingual_v2",
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          },
-        }),
-      });
+          if (elevenResponse.ok && elevenResponse.body) {
+            const charCost = elevenResponse.headers.get("character-cost");
+            const requestId = elevenResponse.headers.get("request-id");
+            const traceId = elevenResponse.headers.get("x-trace-id") || elevenResponse.headers.get("trace-id");
 
-      if (!elevenResponse.ok) {
-        res.setHeader("x-elevenlabs-error", "true");
-        res.status(200).json({ 
-          text: text_response, 
-          warning: "ElevenLabs API temporarily unavailable. Using synthetic browser fallback." 
-        });
-        return;
-      }
+            if (charCost) res.setHeader("x-character-cost", charCost);
+            if (requestId) res.setHeader("x-request-id", requestId);
+            if (traceId) res.setHeader("x-trace-id", traceId);
 
-      // Extract raw response headers for billing and tracing
-      const charCost = elevenResponse.headers.get("character-cost");
-      const requestId = elevenResponse.headers.get("request-id");
-      const traceId = elevenResponse.headers.get("x-trace-id") || elevenResponse.headers.get("trace-id");
-
-      if (charCost) res.setHeader("x-character-cost", charCost);
-      if (requestId) res.setHeader("x-request-id", requestId);
-      if (traceId) res.setHeader("x-trace-id", traceId);
-
-      // Stream the audio back to the frontend
-      res.setHeader("Content-Type", "audio/mpeg");
-      
-      if (elevenResponse.body) {
-        const reader = elevenResponse.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(Buffer.from(value));
+            res.setHeader("Content-Type", "audio/mpeg");
+            const reader = elevenResponse.body.getReader();
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              res.write(Buffer.from(value));
+            }
+            res.end();
+            return;
+          }
+        } catch {
+          // Fall through to Gemini TTS or JSON fallback
         }
-        res.end();
-      } else {
-        res.status(500).json({ error: "Empty stream returned from ElevenLabs" });
       }
 
+      // If ElevenLabs is unavailable or not configured, try Gemini TTS WAV synthesis first
+      if (aiClient && text_response) {
+        const wavBuf = await generateGeminiTtsWav(aiClient, text_response, "Kore");
+        if (wavBuf && wavBuf.length > 44) {
+          res.setHeader("Content-Type", "audio/wav");
+          res.status(200).send(wavBuf);
+          return;
+        }
+      }
+
+      // Final fallback: JSON with text response for browser speechSynthesis
+      res.setHeader("x-elevenlabs-missing", "true");
+      res.status(200).json({ 
+        text: text_response, 
+        warning: "Using browser speech synthesis fallback." 
+      });
     } catch (error: any) {
       const text = getOfflineRoleplayResponse(sanitizePromptText(req.body?.user_input, 2000), sanitizePromptText(req.body?.persona_prompt, 500));
       res.setHeader("x-response-text", encodeURIComponent(text));
+      res.setHeader("x-elevenlabs-missing", "true");
       res.status(200).json({ text });
     }
   });
@@ -692,7 +890,6 @@ Excellent job completing your dialogue practice! You showed great confidence and
 ### 🗣️ Pronunciation & Fluency Hints
 - Speak slowly and focus on vowel clarity (e.g. contrast long vowels like in "cheap" and short vowels in "ship").
 - Repeat after your AI partner to mimic native word-linking and intonation.
-- *Pro Tip*: Connect a valid \`GEMINI_API_KEY\` in your Settings to activate dynamic, personalized phonetic and pronunciation suggestions!
 
 ### ✍️ Script Feedback & Corrections
 - Make sure to practice writing or typing full sentences to build structural syntax memory.
@@ -736,7 +933,7 @@ Please offer a highly structured, supportive critique in Markdown format:
 Keep the tone encouraging, inspiring, and professional.`;
 
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const ai = createGeminiClient(geminiKey);
         const geminiResponse = await generateGeminiText(ai, "Provide feedback", {
           systemInstruction: systemPrompt
         });
@@ -746,36 +943,10 @@ Keep the tone encouraging, inspiring, and professional.`;
       }
     } catch (error: any) {
       res.status(200).json({ 
-        feedback: `### Lesson Summary\n\nExcellent work! Your dialogue has been recorded safely. Set a valid \`GEMINI_API_KEY\` to enable dynamic, automated AI corrections.`
+        feedback: `### Lesson Summary\n\nExcellent work! Your dialogue has been recorded safely.`
       });
     }
   });
-
-  // In-memory LRU cache for generated flashcard data
-  const FLASHCARD_CACHE_MAX_SIZE = 500;
-  const flashcardCache = new Map<string, any>();
-
-  function getCachedFlashcard(key: string): any | undefined {
-    if (!flashcardCache.has(key)) return undefined;
-    const value = flashcardCache.get(key);
-    // Refresh position for LRU
-    flashcardCache.delete(key);
-    flashcardCache.set(key, value);
-    return value;
-  }
-
-  function setCachedFlashcard(key: string, value: any): void {
-    if (flashcardCache.has(key)) {
-      flashcardCache.delete(key);
-    } else if (flashcardCache.size >= FLASHCARD_CACHE_MAX_SIZE) {
-      // Evict oldest item
-      const oldestKey = flashcardCache.keys().next().value;
-      if (oldestKey !== undefined) {
-        flashcardCache.delete(oldestKey);
-      }
-    }
-    flashcardCache.set(key, value);
-  }
 
   // API route for detailed dynamic vocabulary flashcard enrichment
   app.post("/api/flashcard", async (req: express.Request, res: express.Response) => {
@@ -788,20 +959,11 @@ Keep the tone encouraging, inspiring, and professional.`;
         return;
       }
 
-      const cacheKey = `${safeVocab.toLowerCase()}:::${safeTopic.toLowerCase()}`;
-      const cached = getCachedFlashcard(cacheKey);
-      if (cached) {
-        res.status(200).json(cached);
-        return;
-      }
-
       const geminiKey = process.env.GEMINI_API_KEY;
       const isKeyValid = geminiKey && geminiKey.trim().length > 10;
 
       if (!isKeyValid) {
-        // Return rich, beautiful offline card description instantly
         const offlineCard = generateResilientOfflineCard(safeVocab, safeTopic);
-        setCachedFlashcard(cacheKey, offlineCard);
         res.status(200).json(offlineCard);
         return;
       }
@@ -825,7 +987,7 @@ Provide a JSON response with the following keys and structure:
 Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or any other characters.`;
 
       try {
-        const ai = new GoogleGenAI({ apiKey: geminiKey });
+        const ai = createGeminiClient(geminiKey);
         const geminiResponse = await generateGeminiText(ai, "Generate flashcard", {
           systemInstruction: systemPrompt,
           responseMimeType: "application/json"
@@ -834,11 +996,9 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
         const text = geminiResponse.text?.trim() || "{}";
         const cleaned = text.startsWith("```json") ? text.replace(/^[^{]*/, "").replace(/[^}]*$/, "") : text;
         const data = JSON.parse(cleaned);
-        setCachedFlashcard(cacheKey, data);
         res.status(200).json(data);
       } catch (err) {
         const offlineCard = generateResilientOfflineCard(safeVocab, safeTopic);
-        setCachedFlashcard(cacheKey, offlineCard);
         res.status(200).json(offlineCard);
       }
     } catch (error: any) {
@@ -862,7 +1022,7 @@ Respond ONLY with the raw JSON object. Do not wrap it in markdown code blocks or
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  server.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

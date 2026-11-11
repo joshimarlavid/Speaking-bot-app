@@ -115,29 +115,43 @@ export const useSession = (
       const responseTextHeader = response.headers.get("x-response-text");
       const spokenText = responseTextHeader ? decodeURIComponent(responseTextHeader) : "";
 
+      const contentType = response.headers.get("content-type") || "";
       const isMissingKey = response.headers.get("x-elevenlabs-missing") === "true";
       const isError = response.headers.get("x-elevenlabs-error") === "true";
 
       let finalMsg = spokenText;
 
-      if (isMissingKey || isError) {
-        const data = await response.json();
-        finalMsg = data.text || spokenText;
-        if (isMissingKey) {
-          setElevenWarning("Neural Voice fallback: Please configure ELEVEN_API_KEY to hear realistic characters.");
-        }
-
+      const speakFallback = (msgText: string) => {
+        if (!msgText) return;
         const synth = window.speechSynthesis;
         if (synth) {
-          const utterance = new SpeechSynthesisUtterance(finalMsg);
+          synth.cancel();
+          const utterance = new SpeechSynthesisUtterance(msgText);
           utterance.lang = "en-US";
           synth.speak(utterance);
         }
+      };
+
+      if (isMissingKey || isError || !response.ok || contentType.includes("application/json")) {
+        const data = await response.json().catch(() => ({}));
+        finalMsg = data.text || spokenText;
+        speakFallback(finalMsg);
       } else {
         const audioBlob = await response.blob();
-        const audioUrl = URL.createObjectURL(audioBlob);
-        const audio = new Audio(audioUrl);
-        await audio.play();
+        if (audioBlob.size > 0 && contentType.startsWith("audio/")) {
+          const audioUrl = URL.createObjectURL(audioBlob);
+          try {
+            const audio = new Audio();
+            audio.src = audioUrl;
+            await audio.play();
+            audio.onended = () => URL.revokeObjectURL(audioUrl);
+          } catch {
+            URL.revokeObjectURL(audioUrl);
+            speakFallback(finalMsg);
+          }
+        } else {
+          speakFallback(finalMsg);
+        }
       }
 
       setElevenMessages(prev => [...prev, { role: 'model', text: finalMsg }]);
@@ -203,35 +217,49 @@ export const useSession = (
         const responseTextHeader = response.headers.get("x-response-text");
         const spokenText = responseTextHeader ? decodeURIComponent(responseTextHeader) : "";
 
+        const contentType = response.headers.get("content-type") || "";
         const isMissingKey = response.headers.get("x-elevenlabs-missing") === "true";
         const isError = response.headers.get("x-elevenlabs-error") === "true";
 
         let finalMsg = spokenText;
 
-        if (isMissingKey || isError) {
-          const data = await response.json();
-          finalMsg = data.text || spokenText;
-          if (isMissingKey) {
-            setElevenWarning("Neural Voice fallback: Please configure ELEVEN_API_KEY in server secrets to hear realistic characters.");
-          }
-
+        const speakFallback = (msgText: string) => {
+          if (!msgText) return;
           const synth = window.speechSynthesis;
           if (synth) {
-            const utterance = new SpeechSynthesisUtterance(finalMsg);
+            synth.cancel();
+            const utterance = new SpeechSynthesisUtterance(msgText);
             utterance.lang = "en-US";
             synth.speak(utterance);
           }
+        };
+
+        if (isMissingKey || isError || !response.ok || contentType.includes("application/json")) {
+          const data = await response.json().catch(() => ({}));
+          finalMsg = data.text || spokenText;
+          speakFallback(finalMsg);
         } else {
           const audioBlob = await response.blob();
-          const audioUrl = URL.createObjectURL(audioBlob);
-          const audio = new Audio(audioUrl);
-          await audio.play();
+          if (audioBlob.size > 0 && contentType.startsWith("audio/")) {
+            const audioUrl = URL.createObjectURL(audioBlob);
+            try {
+              const audio = new Audio();
+              audio.src = audioUrl;
+              await audio.play();
+              audio.onended = () => URL.revokeObjectURL(audioUrl);
+            } catch {
+              URL.revokeObjectURL(audioUrl);
+              speakFallback(finalMsg);
+            }
+          } else {
+            speakFallback(finalMsg);
+          }
         }
 
         setElevenMessages([{ role: 'model', text: finalMsg }]);
       } catch (e: any) {
         console.error(e);
-        setElevenWarning("Failed to initialize modern neural roleplay. Standard speech fallback active.");
+        setElevenWarning("Standard speech fallback active.");
       } finally {
         setElevenLabsLoading(false);
       }
