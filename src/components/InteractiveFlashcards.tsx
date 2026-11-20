@@ -70,47 +70,76 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   const [quizAnswer, setQuizAnswer] = useState("");
   const [quizSubmitted, setQuizSubmitted] = useState(false);
   const [quizIsCorrect, setQuizIsCorrect] = useState(false);
+  const [quizRevealed, setQuizRevealed] = useState(false);
+  const quizSubmittedRef = useRef(false);
 
-  // Dynamic API retrieval states
+  // Cache details by deck as the endpoint also receives the topic.
   const [enrichmentData, setEnrichmentData] = useState<Record<string, FlashcardData>>({});
-  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const enrichmentRef = useRef(enrichmentData);
+  const enrichmentKey = JSON.stringify([selectedDeckId, currentWord]);
+  const currentMeta = enrichmentData[enrichmentKey];
+  const isLoadingDetails = !!currentWord && !currentMeta;
 
-  // Spaced Repetition persistence (localStorage mapping)
-  const [masteredWords, setMasteredWords] = useState<Record<string, boolean>>(() => {
+  const resetQuiz = useCallback(() => {
+    quizSubmittedRef.current = false;
+    setQuizSubmitted(false);
+    setQuizAnswer('');
+    setQuizRevealed(false);
+  }, []);
+
+  // Keep progress per deck. Expand the old word-only format to preserve existing progress.
+  const [masteryByDeck, setMasteryByDeck] = useState<Record<string, Record<string, boolean>>>(() => {
     try {
-      const saved = localStorage.getItem('linguaRole_mastered_words');
-      return saved ? JSON.parse(saved) : {};
+      const saved = JSON.parse(localStorage.getItem('linguaRole_mastered_words') || '{}');
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+      if (Object.values(saved).some(value => typeof value === 'boolean')) {
+        return Object.fromEntries(decks.map(deck => [deck.id, Object.fromEntries(
+          deck.vocabulary.filter(word => saved[word] === true).map(word => [word, true])
+        )]));
+      }
+      return Object.fromEntries(Object.entries(saved)
+        .filter(([, words]) => words && typeof words === 'object' && !Array.isArray(words))
+        .map(([deckId, words]) => [deckId, Object.fromEntries(
+          Object.entries(words as Record<string, unknown>).filter(([, value]) => value === true).map(([word]) => [word, true])
+        )]));
     } catch {
       return {};
     }
   });
+  const masteryRef = useRef(masteryByDeck);
+  const masteredWords = masteryByDeck[selectedDeckId] || {};
 
-  // Save mastered words when modified
-  const markMastery = useCallback((word: string, isMastered: boolean) => {
-    setMasteredWords(prev => {
-      const updated = { ...prev, [word]: isMastered };
+  const saveMastery = useCallback((updated: Record<string, Record<string, boolean>>) => {
+    masteryRef.current = updated;
+    setMasteryByDeck(updated);
+    try {
       localStorage.setItem('linguaRole_mastered_words', JSON.stringify(updated));
-      return updated;
-    });
-    if (isMastered) {
-      playReward();
-    } else {
-      playClick();
+    } catch {
+      // Progress still works for this session if storage is unavailable.
     }
-  }, [playReward, playClick]);
+  }, []);
+
+  const markMastery = useCallback((word: string, isMastered: boolean) => {
+    if (!word) return;
+    const deckWords = masteryRef.current[selectedDeckId] || {};
+    const wasMastered = deckWords[word] === true;
+    if (wasMastered !== isMastered) {
+      const updatedWords = { ...deckWords };
+      if (isMastered) updatedWords[word] = true;
+      else delete updatedWords[word];
+      saveMastery({ ...masteryRef.current, [selectedDeckId]: updatedWords });
+      if (isMastered) playReward();
+      else playClick();
+    }
+  }, [selectedDeckId, playReward, playClick, saveMastery]);
 
   // Clean / Reset deck progress
   const resetDeckProgress = () => {
     playClick();
     if (!window.confirm("Are you sure you want to revive all cards in this deck?")) return;
-    setMasteredWords(prev => {
-      const updated = { ...prev };
-      activeDeck.vocabulary.forEach(w => {
-        delete updated[w];
-      });
-      localStorage.setItem('linguaRole_mastered_words', JSON.stringify(updated));
-      return updated;
-    });
+    const updated = { ...masteryRef.current };
+    delete updated[selectedDeckId];
+    saveMastery(updated);
   };
 
   // Auto-play state
@@ -140,24 +169,24 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     window.speechSynthesis.speak(utterance);
   }, []);
 
-  // Fetch enrichment meta from dynamic Gemini Endpoint
-  const fetchCardEnrichment = useCallback(async (word: string) => {
-    if (!word) return;
-    if (enrichmentData[word]) return; // Already cached
-
-    setIsLoadingDetails(true);
-    try {
-      const response = await fetch('/api/flashcard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vocab: word, topic: activeDeck.title })
-      });
-      
-      if (!response.ok) throw new Error('API failed');
-      const data = await response.json();
-      setEnrichmentData(prev => ({
-        ...prev,
-        [word]: {
+  // Ignore late responses after navigating; they must not affect the visible card.
+  useEffect(() => {
+    if (!currentWord || enrichmentRef.current[enrichmentKey]) return;
+    const controller = new AbortController();
+    let cancelled = false;
+    const word = currentWord;
+    const load = async () => {
+      let details: FlashcardData;
+      try {
+        const response = await fetch('/api/flashcard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vocab: word, topic: activeDeck.title }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error('API failed');
+        const data = await response.json();
+        details = {
           vocab: word,
           definitionEn: data.definitionEn || "Meaning in practice.",
           definitionEs: data.definitionEs || "Significado práctico.",
@@ -167,14 +196,11 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
           exampleEs: data.exampleEs || `Usemos "${word}" en nuestro siguiente juego de rol.`,
           syllables: data.syllables || word,
           tips: data.tips || "No special grammatical warnings."
-        }
-      }));
-    } catch (e) {
-      console.error("Failed to load flashcard meta description:", e);
-      // set resilient safe feedback values
-      setEnrichmentData(prev => ({
-        ...prev,
-        [word]: {
+        };
+      } catch (e) {
+        if (cancelled) return;
+        console.error("Failed to load flashcard meta description:", e);
+        details = {
           vocab: word,
           definitionEn: "Click to explore this vocabulary in context with the interactive tutor.",
           definitionEs: "Haz clic para explorar este vocabulario en contexto con el tutor interactivo.",
@@ -184,22 +210,16 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
           exampleEs: `Deberíamos practicar usando "${word}" en una conversación cotidiana.`,
           syllables: word,
           tips: "Try spelling and pronouncing this term out loud three times to improve your fluency!"
-        }
-      }));
-    } finally {
-      setIsLoadingDetails(false);
-    }
-  }, [enrichmentData, activeDeck, setEnrichmentData]);
-
-  // Sync API details when word changes
-  useEffect(() => {
-    setIsFlipped(false);
-    setQuizSubmitted(false);
-    setQuizAnswer("");
-    if (currentWord) {
-      fetchCardEnrichment(currentWord);
-    }
-  }, [currentIndex, currentWord, fetchCardEnrichment]);
+        };
+      }
+      if (cancelled) return;
+      const updated = { ...enrichmentRef.current, [enrichmentKey]: details };
+      enrichmentRef.current = updated;
+      setEnrichmentData(updated);
+    };
+    void load();
+    return () => { cancelled = true; controller.abort(); };
+  }, [currentWord, enrichmentKey, activeDeck.title]);
 
   // Clean-up loop on unmount
   useEffect(() => {
@@ -215,8 +235,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     setCurrentIndex(0);
     setIsFlipped(false);
     setIsQuizMode(false);
-    setQuizSubmitted(false);
-    setQuizAnswer("");
+    resetQuiz();
     setIsAutoPlaying(false);
     if (autoPlayTimer.current) {
       clearInterval(autoPlayTimer.current);
@@ -227,32 +246,29 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   const handleNext = useCallback(() => {
     playClick();
     if (activeDeck.vocabulary.length === 0) return;
+    resetQuiz();
+    setIsFlipped(false);
     setCurrentIndex(prev => (prev + 1) % activeDeck.vocabulary.length);
-  }, [activeDeck, playClick]);
+  }, [activeDeck, playClick, resetQuiz]);
 
   const handlePrev = useCallback(() => {
     playClick();
     if (activeDeck.vocabulary.length === 0) return;
+    resetQuiz();
+    setIsFlipped(false);
     setCurrentIndex(prev => (prev - 1 + activeDeck.vocabulary.length) % activeDeck.vocabulary.length);
-  }, [activeDeck, playClick]);
+  }, [activeDeck, playClick, resetQuiz]);
 
   // Auto-learner cycle loop
   useEffect(() => {
     if (isAutoPlaying) {
       autoPlayTimer.current = setInterval(() => {
-        setIsFlipped(f => {
-          if (!f) {
-            // Pronounce word when flipping to the back
-            if (currentWord) {
-              speakText(currentWord);
-            }
-            return true;
-          } else {
-            // Move to next word when flipping back up
-            handleNext();
-            return false;
-          }
-        });
+        if (!isFlipped) {
+          if (currentWord) speakText(currentWord);
+          setIsFlipped(true);
+        } else {
+          handleNext();
+        }
       }, 5000);
     } else {
       if (autoPlayTimer.current) {
@@ -262,22 +278,19 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
     return () => {
       if (autoPlayTimer.current) clearInterval(autoPlayTimer.current);
     };
-  }, [isAutoPlaying, currentIndex, currentWord, handleNext, speakText]);
+  }, [isAutoPlaying, isFlipped, currentIndex, currentWord, handleNext, speakText]);
 
   // Submit Quiz/Self-test
   const onSubmitQuiz = (e: React.FormEvent) => {
     e.preventDefault();
+    if (quizSubmittedRef.current || !quizAnswer.trim() || !currentWord) return;
+    quizSubmittedRef.current = true;
     playClick();
-    if (!quizAnswer.trim()) return;
-    
-    // Loose checker comparing trimmed lower case
-    const isCorrect = quizAnswer.trim().toLowerCase() === currentWord.toLowerCase().replace(/[()]/g, "").trim();
+    const normalize = (value: string) => value.replace(/[()]/g, '').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+    const isCorrect = normalize(quizAnswer) === normalize(currentWord);
     setQuizIsCorrect(isCorrect);
     setQuizSubmitted(true);
-    if (isCorrect) {
-      playReward();
-      markMastery(currentWord, true);
-    }
+    if (isCorrect && !quizRevealed) markMastery(currentWord, true);
   };
 
   // Quick statistics calculation
@@ -285,8 +298,6 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
   const progressPercent = activeDeck.vocabulary.length > 0 
     ? Math.round((masteredCountInDeck / activeDeck.vocabulary.length) * 100) 
     : 0;
-
-  const currentMeta = enrichmentData[currentWord];
 
   return (
     <div className="space-y-6">
@@ -376,7 +387,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
           {/* Quiz Mode Button */}
           <button
             type="button"
-            onClick={() => { playClick(); setIsQuizMode(true); }}
+            onClick={() => { playClick(); setIsAutoPlaying(false); setIsFlipped(false); setIsQuizMode(true); }}
             className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all border ${
               isQuizMode 
                 ? 'bg-indigo-950 border-indigo-500/50 text-indigo-300 font-black' 
@@ -390,7 +401,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
         {/* Auto Play controls */}
         <button
           type="button"
-          onClick={() => { playClick(); setIsAutoPlaying(!isAutoPlaying); }}
+          onClick={() => { playClick(); if (!isAutoPlaying) setIsQuizMode(false); setIsAutoPlaying(!isAutoPlaying); }}
           className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border ${
             isAutoPlaying 
               ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-300 animate-pulse' 
@@ -624,6 +635,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
                     onClick={() => {
                       playClick();
                       // Reveal correct answers directly
+                      setQuizRevealed(true);
                       setQuizAnswer(currentWord.replace(/[()]/g, ""));
                     }}
                     className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest hover:text-indigo-400 transition-colors"
@@ -662,8 +674,10 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
                       type="button"
                       onClick={() => {
                         playClick();
+                        quizSubmittedRef.current = false;
                         setQuizSubmitted(false);
                         setQuizAnswer("");
+                        setQuizRevealed(true); // The result panel displayed the spelling.
                       }}
                       className="flex-1 py-2 bg-zinc-900 hover:bg-zinc-855 text-zinc-300 font-black text-[11px] uppercase tracking-wider rounded-xl border border-zinc-800"
                     >
@@ -698,7 +712,7 @@ export function InteractiveFlashcards({ theme, playClick, playReward }: Interact
               <span className="text-xs font-bold text-white font-mono uppercase tracking-wider">
                 {currentIndex + 1} / {activeDeck.vocabulary.length} Runes
               </span>
-              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mt-0.5">{currentWord}</p>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest mt-0.5">{isQuizMode ? 'Recall the word' : currentWord}</p>
             </div>
 
             <button

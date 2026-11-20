@@ -1,4 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { WebSocket } from 'ws';
+import { createAppServer } from './server';
+
+const gemini = vi.hoisted(() => ({ generate: vi.fn(), connect: vi.fn() }));
+vi.mock('@google/genai', () => ({
+  GoogleGenAI: class {
+    models = { generateContent: gemini.generate };
+    live = { connect: gemini.connect };
+  },
+  Modality: { AUDIO: 'AUDIO' },
+}));
 import express from 'express';
 import http from 'node:http';
 
@@ -108,6 +119,300 @@ async function runTestServer(app: express.Express, testFn: (port: number) => Pro
     await new Promise((resolve) => server.close(resolve));
   }
 }
+
+async function withRealServer(test: (port: number) => Promise<void>) {
+  const server = await createAppServer({ skipFrontend: true });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await test((server.address() as { port: number }).port);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((err) => err ? reject(err) : resolve()));
+  }
+}
+
+async function postEndpoint(port: number, path: string, body: unknown) {
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+const learnerMessages = [
+  { role: 'model', text: 'Welcome to the shop.' },
+  { role: 'user', text: 'I would like to buy a ticket today and I need some help finding the right counter please.' },
+  { role: 'model', text: 'Where are you going?' },
+  { role: 'user', text: 'I am going to London tomorrow with my family and we want to travel in the morning.' },
+];
+
+const originalGeminiKey = process.env.GEMINI_API_KEY;
+afterEach(() => {
+  if (originalGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
+  else process.env.GEMINI_API_KEY = originalGeminiKey;
+  vi.restoreAllMocks();
+  gemini.generate.mockReset();
+  gemini.connect.mockReset();
+});
+
+describe('Feedback and exercise endpoints', () => {
+  it('accepts ordered messages and context without attributing partner text to the learner', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    gemini.generate.mockResolvedValue({ text: '### Estimated level\nTentative A2' });
+    await withRealServer(async (port) => {
+      const result = await postEndpoint(port, '/api/feedback', {
+        messages: learnerMessages, role: { name: 'Clerk', winCondition: 'Buy a ticket' },
+        topic: { title: 'Travel', grammar: 'Questions', vocabulary: ['ticket'] }, mode: 'student',
+      });
+      expect(result.status).toBe(200);
+      expect(result.body.feedback).toContain('not a certified assessment');
+      const prompt = gemini.generate.mock.calls[0][0].config.systemInstruction;
+      const data = JSON.parse(prompt.slice(prompt.indexOf('{"context"')));
+      expect(data.transcript).toEqual(learnerMessages);
+      expect(data.context.role.name).toBe('Clerk');
+      expect(data.context.topic.title).toBe('Travel');
+      expect(data.context.mode).toBe('student');
+      expect(prompt).toContain('Quote exact learner phrases');
+      expect(prompt).toContain('Do not infer pronunciation');
+    });
+  });
+
+  it('labels insufficient evidence and offline feedback without invented praise', async () => {
+    delete process.env.GEMINI_API_KEY;
+    await withRealServer(async (port) => {
+      const short = await postEndpoint(port, '/api/feedback', { messages: [{ role: 'user', text: 'Hi' }] });
+      expect(short.body.feedback).toContain('Insufficient evidence');
+      const offline = await postEndpoint(port, '/api/feedback', { history: learnerMessages });
+      expect(offline.body.feedback).toContain('unavailable offline');
+      expect(offline.body.feedback).not.toMatch(/excellent|successfully/i);
+      const invalid = await postEndpoint(port, '/api/feedback', { messages: [{ role: 'system', text: 'hello' }] });
+      expect(invalid.status).toBe(400);
+    });
+  });
+
+  it('falls back honestly if feedback generation fails or returns empty', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    gemini.generate.mockResolvedValue({ text: '' });
+    await withRealServer(async (port) => {
+      const response = await postEndpoint(port, '/api/feedback', { messages: learnerMessages });
+      expect(response.body.feedback).toContain('Feedback unavailable');
+    });
+  });
+
+  it('does not leak provider errors and keeps legacy context and partner roles intact', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    gemini.generate.mockRejectedValue(new Error('provider secret key'));
+    await withRealServer(async (port) => {
+      const result = await postEndpoint(port, '/api/feedback', { history: learnerMessages });
+      expect(result.status).toBe(200);
+      expect(result.body.feedback).toContain('Feedback unavailable');
+      expect(JSON.stringify(result.body)).not.toContain('provider secret key');
+      expect(gemini.generate).toHaveBeenCalledTimes(3);
+      gemini.generate.mockResolvedValue({ text: 'Feedback' });
+      await postEndpoint(port, '/api/feedback', {
+        history: [{ role: 'assistant', text: 'Partner words' }, ...learnerMessages],
+        role: 'Guide', topic_title: 'Legacy topic', grammar: 'Past', vocabulary: ['ticket'], student_name: 'Alex',
+      });
+      const prompt = gemini.generate.mock.calls.at(-1)![0].config.systemInstruction;
+      const data = JSON.parse(prompt.slice(prompt.indexOf('{"context"')));
+      expect(data.transcript[0]).toEqual({ role: 'model', text: 'Partner words' });
+      expect(data.context).toMatchObject({ role: { name: 'Guide' }, topic: { title: 'Legacy topic', grammar: 'Past', vocabulary: ['ticket'] }, student: 'Alex' });
+    });
+  });
+
+  it('rejects malformed generated exercises and falls back when the provider fails', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    const valid = { question: 'I ____ home.', options: ['go', 'goes', 'went', 'going'], answer: 0, explanation: 'Use go with I.' };
+    const invalid = [
+      'not JSON', JSON.stringify(null),
+      JSON.stringify({ ...valid, question: 'No blank' }),
+      JSON.stringify({ ...valid, options: ['go', 'GO ', 'went', 'going'] }),
+      JSON.stringify({ ...valid, options: ['go', 'goes'] }),
+      JSON.stringify({ ...valid, options: ['go', 'goes', '', 'going'] }),
+      JSON.stringify({ ...valid, explanation: ' ' }),
+      JSON.stringify({ ...valid, pronunciation: 42 }),
+    ];
+    await withRealServer(async (port) => {
+      for (const text of invalid) {
+        gemini.generate.mockResolvedValue({ text });
+        const result = await postEndpoint(port, '/api/generate-exercise', { randomTopic: { title: 'Travel' } });
+        expect(result.status).toBe(200);
+        expect(result.body.topic).not.toBe('Travel');
+        expect(result.body.options).toHaveLength(4);
+        expect(result.body.options[result.body.answer]).toBeTruthy();
+      }
+      gemini.generate.mockRejectedValue(new Error('sensitive provider error'));
+      const failed = await postEndpoint(port, '/api/generate-exercise', {});
+      expect(failed.status).toBe(200);
+      expect(JSON.stringify(failed.body)).not.toContain('sensitive provider error');
+      expect(failed.body.options[failed.body.answer]).toBeTruthy();
+    });
+  });
+
+  it('validates generated exercises and supplies varied, valid offline exercises', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    await withRealServer(async (port) => {
+      const topic = { title: 'Travel' };
+      gemini.generate.mockResolvedValue({ text: JSON.stringify({ question: 'I ____ home.', options: ['go', 'goes', 'went', 'going'], answer: 0, explanation: 'Use go with I.' }) });
+      const valid = await postEndpoint(port, '/api/generate-exercise', { randomTopic: topic });
+      expect(valid.body.topic).toBe('Travel');
+      expect(valid.body.question).toBe('I ____ home.');
+      for (const answer of [-1, 4, 1.5, '1']) {
+        gemini.generate.mockResolvedValue({ text: JSON.stringify({ question: 'I ____ home.', options: ['go', 'goes', 'went', 'going'], answer, explanation: 'test' }) });
+        const invalid = await postEndpoint(port, '/api/generate-exercise', { randomTopic: topic });
+        expect(invalid.body.question).not.toBe('I ____ home.');
+        expect(invalid.body.answer).toBeGreaterThanOrEqual(0);
+        expect(invalid.body.answer).toBeLessThan(4);
+        expect(invalid.body.topic).not.toBe('Travel');
+      }
+      delete process.env.GEMINI_API_KEY;
+      const random = vi.spyOn(Math, 'random');
+      random.mockReturnValueOnce(0).mockReturnValueOnce(0.9);
+      const first = await postEndpoint(port, '/api/generate-exercise', {});
+      const second = await postEndpoint(port, '/api/generate-exercise', {});
+      expect(first.body.question).not.toBe(second.body.question);
+      expect(first.body.options[first.body.answer]).toBeTruthy();
+      expect(second.body.options[second.body.answer]).toBeTruthy();
+    });
+  });
+});
+
+describe('Live bridge handshake', () => {
+  it('forwards ordered Live events, audio input, and a turn completion boundary', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    let callbacks: any;
+    const session = { close: vi.fn(), sendRealtimeInput: vi.fn() };
+    gemini.connect.mockImplementation((params) => {
+      callbacks = params.callbacks;
+      return Promise.resolve(session);
+    });
+    await withRealServer(async (port) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/api/live`);
+      try {
+        await new Promise<void>((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+        const received: any[] = [];
+        ws.on('message', (message) => received.push(JSON.parse(message.toString())));
+        ws.send(JSON.stringify({ type: 'setup', voiceName: 'Kore', systemInstruction: 'Be concise' }));
+        await vi.waitFor(() => expect(received).toContainEqual({ type: 'connected' }));
+        expect(gemini.connect.mock.calls[0][0]).toMatchObject({
+          model: 'gemini-3.1-flash-live-preview',
+          config: { responseModalities: ['AUDIO'], systemInstruction: 'Be concise', inputAudioTranscription: {}, outputAudioTranscription: {}, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } } },
+        });
+        callbacks.onmessage({ serverContent: {
+          interrupted: true, inputTranscription: { text: 'hello' }, outputTranscription: { text: 'welcome' },
+          modelTurn: { parts: [{ inlineData: { data: 'YWJj' } }, { text: 'welcome' }] }, turnComplete: true,
+        } });
+        await vi.waitFor(() => expect(received).toHaveLength(7));
+        expect(received.slice(1)).toEqual([
+          { type: 'interrupted' }, { type: 'inputTranscript', text: 'hello' },
+          { type: 'outputTranscript', text: 'welcome' }, { type: 'audio', data: 'YWJj' },
+          { type: 'text', text: 'welcome' }, { type: 'turn_complete' },
+        ]);
+        ws.send(JSON.stringify({ type: 'audio', data: 'YXVkaW8=' }));
+        await vi.waitFor(() => expect(session.sendRealtimeInput).toHaveBeenCalledWith({ audio: { mimeType: 'audio/pcm;rate=16000', data: 'YXVkaW8=' } }));
+        ws.send(JSON.stringify({ type: 'setup' }));
+        await vi.waitFor(() => expect(received).toContainEqual({ type: 'error', message: 'Live session setup has already started.' }));
+        expect(gemini.connect).toHaveBeenCalledTimes(1);
+      } finally {
+        if (ws.readyState !== WebSocket.CLOSED) {
+          ws.close();
+          await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+        }
+      }
+    });
+    expect(session.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('sanitizes synchronous send errors and malformed client messages', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    const session = { close: vi.fn(), sendRealtimeInput: vi.fn(() => { throw new Error('secret upstream details'); }) };
+    gemini.connect.mockResolvedValue(session);
+    const log = vi.spyOn(console, 'error');
+    await withRealServer(async (port) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/api/live`);
+      try {
+        await new Promise<void>((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+        const received: any[] = [];
+        ws.on('message', (message) => received.push(JSON.parse(message.toString())));
+        ws.send(JSON.stringify({ type: 'setup', voiceName: 'invalid' }));
+        await vi.waitFor(() => expect(received).toContainEqual({ type: 'connected' }));
+        expect(gemini.connect.mock.calls[0][0].config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe('Zephyr');
+        ws.send('not json');
+        ws.send(JSON.stringify({ type: 'text', text: 'hello' }));
+        await vi.waitFor(() => expect(received.filter(m => m.type === 'error')).toHaveLength(2));
+        expect(JSON.stringify(received)).not.toContain('secret upstream details');
+        expect(log).not.toHaveBeenCalled();
+      } finally {
+        if (ws.readyState !== WebSocket.CLOSED) {
+          ws.close();
+          await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+        }
+      }
+    });
+  });
+
+  it('closes a late upstream session if the client disconnects during setup', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    let resolveSession!: (session: any) => void;
+    const session = { close: vi.fn(), sendRealtimeInput: vi.fn() };
+    gemini.connect.mockImplementation(() => new Promise(resolve => { resolveSession = resolve; }));
+    await withRealServer(async (port) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/api/live`);
+      await new Promise<void>((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
+      ws.send(JSON.stringify({ type: 'setup' }));
+      await vi.waitFor(() => expect(gemini.connect).toHaveBeenCalled());
+      ws.close();
+      await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+      resolveSession(session);
+      await vi.waitFor(() => expect(session.close).toHaveBeenCalledTimes(1));
+    });
+  });
+
+  it('reports upstream failures instead of a successful connection', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    gemini.connect.mockImplementation(({ callbacks }) => {
+      callbacks.onopen();
+      callbacks.onerror({ message: 'secret key must not leak' });
+      return Promise.reject(new Error('upstream failed'));
+    });
+    await withRealServer(async (port) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/api/live`);
+      await new Promise<void>((resolve) => ws.once('open', resolve));
+      const received: any[] = [];
+      ws.on('message', (message) => received.push(JSON.parse(message.toString())));
+      ws.send(JSON.stringify({ type: 'setup' }));
+      await vi.waitFor(() => expect(received).toContainEqual({ type: 'error', message: 'Live API connection error.' }));
+      expect(received).not.toContainEqual({ type: 'connected' });
+      ws.close();
+      await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+    });
+  });
+
+  it('waits for completed upstream setup before reporting connected', async () => {
+    process.env.GEMINI_API_KEY = 'fake-key-for-unit-tests';
+    let resolveSession!: (session: any) => void;
+    const session = { close: vi.fn(), sendRealtimeInput: vi.fn() };
+    gemini.connect.mockImplementation(({ callbacks }) => {
+      callbacks.onopen();
+      return new Promise((resolve) => { resolveSession = resolve; });
+    });
+    await withRealServer(async (port) => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/api/live`);
+      await new Promise<void>((resolve) => ws.once('open', resolve));
+      const received: any[] = [];
+      ws.on('message', (message) => received.push(JSON.parse(message.toString())));
+      ws.send(JSON.stringify({ type: 'setup' }));
+      await vi.waitFor(() => expect(gemini.connect).toHaveBeenCalled());
+      expect(gemini.connect.mock.calls[0][0].model).toBe('gemini-3.1-flash-live-preview');
+      expect(received).toEqual([]);
+      resolveSession(session);
+      await vi.waitFor(() => expect(received).toContainEqual({ type: 'connected' }));
+      ws.send(JSON.stringify({ type: 'text', text: 'Hello' }));
+      await vi.waitFor(() => expect(session.sendRealtimeInput).toHaveBeenCalledWith({ text: 'Hello' }));
+      ws.close();
+      await new Promise<void>((resolve) => ws.once('close', () => resolve()));
+      expect(session.close).toHaveBeenCalled();
+    });
+  });
+});
 
 describe('Proxy Security Middleware (/api/gemini)', () => {
   it('should return 503 if GEMINI_API_KEY is not configured', async () => {

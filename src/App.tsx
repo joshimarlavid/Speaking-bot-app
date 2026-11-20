@@ -288,10 +288,10 @@ export default function App() {
     const defaultTopicId = role ? role.topicId : null;
     
     const saved = localStorage.getItem('linguaRole_topic');
-    if (saved && TOPICS.find(t => t.id === saved)) {
-      return TOPICS.find(t => t.id === saved)!;
-    } else if (defaultTopicId && TOPICS.find(t => t.id === defaultTopicId)) {
+    if (defaultTopicId && TOPICS.find(t => t.id === defaultTopicId)) {
       return TOPICS.find(t => t.id === defaultTopicId)!;
+    } else if (saved && TOPICS.find(t => t.id === saved)) {
+      return TOPICS.find(t => t.id === saved)!;
     }
     return TOPICS[0];
   });
@@ -304,6 +304,7 @@ export default function App() {
   // Use state to hold the current active exercise
   const [currentExercise, setCurrentExercise] = useState(EXERCISES[0]);
   const [isGeneratingExercise, setIsGeneratingExercise] = useState(false);
+  const [exerciseNotice, setExerciseNotice] = useState<string | null>(null);
   
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [exercisesCompleted, setExercisesCompleted] = useState(0);
@@ -319,7 +320,7 @@ export default function App() {
   const [spellError, setSpellError] = useState(false);
 
   // Memoize correct words and full sentence to avoid redundant string parsing
-  const { unscrambleCorrectWords, unscrambleFullSentence } = useMemo(() => {
+  const { unscrambleCorrectWords } = useMemo(() => {
     if (!currentExercise) return { unscrambleCorrectWords: [], unscrambleFullSentence: "" };
     try {
       const correctWord = currentExercise.options[currentExercise.answer];
@@ -364,15 +365,26 @@ export default function App() {
       });
       if (!response.ok) throw new Error("Failed to generate exercise");
       const exercise = await response.json();
+      if (!exercise || typeof exercise.question !== 'string' || !/_{3,}/.test(exercise.question) ||
+          !Array.isArray(exercise.options) || exercise.options.length < 2 ||
+          !exercise.options.every((option: unknown) => typeof option === 'string' && option.trim()) ||
+          !Number.isInteger(exercise.answer) || exercise.answer < 0 || exercise.answer >= exercise.options.length ||
+          typeof exercise.explanation !== 'string' || !exercise.explanation.trim()) {
+        throw new Error('Invalid exercise returned');
+      }
+      setExerciseNotice(null);
       setCurrentExercise({ ...exercise, id: Date.now(), topic: randomTopic.title });
     } catch (error) {
       console.warn("Failed to dynamically generate exercise via Gemini API, falling back to a preloaded study card:", error);
-      const randomPreloaded = EXERCISES[Math.floor(Math.random() * EXERCISES.length)];
+      const alternatives = EXERCISES.filter(exercise => exercise.question !== currentExercise.question);
+      const pool = alternatives.length ? alternatives : EXERCISES;
+      const randomPreloaded = pool[Math.floor(Math.random() * pool.length)];
+      setExerciseNotice('AI exercise unavailable; showing a preloaded exercise instead.');
       setCurrentExercise({ ...randomPreloaded, id: Date.now() });
     } finally {
       setIsGeneratingExercise(false);
     }
-  }, []);
+  }, [currentExercise]);
 
   const handleChoiceSelect = useCallback((idx: number) => {
     if (selectedAnswer !== null) return;
@@ -383,20 +395,6 @@ export default function App() {
       setExerciseStreak(prev => prev + 1);
       playReward();
 
-      try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered exercise: "${currentExercise.question}" using Runes Choice.`,
-          ratingAI: 5,
-          ratingTopic: 5
-        });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
-      } catch (e) {
-        console.error(e);
-      }
     } else {
       setIncorrectAttempts(prev => ({ ...prev, [idx]: true }));
       setExerciseStreak(0);
@@ -415,20 +413,6 @@ export default function App() {
       setExerciseStreak(prev => prev + 1);
       playReward();
 
-      try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered Scribe Ritual for: "${currentExercise.question}" with correct spelling "${correct}".`,
-          ratingAI: 5,
-          ratingTopic: 5
-        });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
-      } catch (e) {
-        console.error(e);
-      }
     } else {
       setSpellError(true);
       setExerciseStreak(0);
@@ -450,20 +434,6 @@ export default function App() {
       setExerciseStreak(prev => prev + 1);
       playReward();
 
-      try {
-        const feedbackLogs = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-        feedbackLogs.push({
-          role: "Gothic Exercise Tutor",
-          date: new Date().toISOString(),
-          topic: currentExercise.topic,
-          comments: `Successfully mastered Incantation order for sentence: "${unscrambleFullSentence}".`,
-          ratingAI: 5,
-          ratingTopic: 5
-        });
-        localStorage.setItem('linguaRole_feedback', JSON.stringify(feedbackLogs));
-      } catch (e) {
-        console.error(e);
-      }
     } else {
       setSpellError(true);
       setExerciseStreak(0);
@@ -472,7 +442,7 @@ export default function App() {
         setSpellError(false);
       }, 850);
     }
-  }, [currentExercise, unscrambleSelected, selectedAnswer]);
+  }, [currentExercise, unscrambleSelected, selectedAnswer, unscrambleCorrectWords]);
 
   const downloadPDFSummary = useCallback(() => {
     try {
@@ -555,7 +525,7 @@ export default function App() {
       doc.text("Rituals Completed:", 25, y + 27);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(50, 50, 50);
-      doc.text(`${exercisesCompleted} exercises mastered successfully`, 72, y + 27);
+      doc.text(`${exercisesCompleted} exercises completed`, 72, y + 27);
 
       y += 42;
 
@@ -699,7 +669,17 @@ export default function App() {
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const [expandedLogIndex, setExpandedLogIndex] = useState<number | null>(null);
 
-  const { isConnected, isConnecting, error, connect, disconnect, userTranscript, aiTranscript, requestFeedback, hasMicrophone, sendTextMessage } = useLiveAPI();
+  const { isConnected, isConnecting, error, connect, disconnect, userTranscript, aiTranscript, getTranscript, hasMicrophone, sendTextMessage, scenarioComplete } = useLiveAPI();
+  const sessionIdRef = useRef(0);
+  const endedRef = useRef(true);
+  const feedbackAbortRef = useRef<AbortController | null>(null);
+  const turnAbortRef = useRef<AbortController | null>(null);
+  const elevenMessagesRef = useRef<Message[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackIdRef = useRef(0);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [speechWarning, setSpeechWarning] = useState<string | null>(null);
+  const [sessionGeneration, setSessionGeneration] = useState(0);
   const [textInput, setTextInput] = useState("");
 
   // ElevenLabs Premium Voice Mode States
@@ -804,75 +784,72 @@ export default function App() {
     return aiTranscript;
   }, [elevenLabsMode, elevenMessages, aiTranscript]);
 
-  const handleElevenMessage = async (text: string) => {
-    if (!text.trim()) return;
+  const handleElevenMessage = async (text: string, greeting = false) => {
+    if (!text.trim() || endedRef.current || turnAbortRef.current) return;
+    const sessionId = sessionIdRef.current;
+    const controller = new AbortController();
+    turnAbortRef.current = controller;
     setElevenLabsLoading(true);
     setElevenWarning(null);
-
-    // Add user message to state
-    setElevenMessages(prev => [...prev, { role: 'user', text }]);
-
+    if (!greeting) {
+      elevenMessagesRef.current = [...elevenMessagesRef.current, { role: 'user', text }];
+      setElevenMessages(elevenMessagesRef.current);
+    }
+    const topic = mode === 'teacher' ? selectedGrammarTopic : selectedTopic;
+    const persona = mode === 'teacher'
+      ? `You are an English grammar teacher helping ${studentName}.`
+      : `You are ${selectedRole.name}. ${selectedRole.description} Learner goal: ${selectedRole.winCondition}.`;
+    const introPrompt = `${persona} Topic: ${topic.title}. Grammar: ${topic.grammar}. Vocabulary: ${topic.vocabulary.join(', ')}. ${mode === 'beginner' ? 'Use simple beginner English.' : ''} Keep replies to 1-2 short sentences.`;
+    const previousMessages = greeting ? [] : elevenMessagesRef.current.slice(0, -1);
+    const context = previousMessages.slice(-8).map(message => `${message.role === 'user' ? 'Learner' : 'Partner'}: ${message.text.slice(0, 140)}`).join('\n');
+    const userInput = context ? `Previous conversation:\n${context}\nLearner: ${text.slice(0, 700)}` : text.slice(0, 700);
     try {
-      const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. The user is the student ${studentName}. Have a conversation with them and naturally encourage them to win. Maintain this character deeply. Keep your responses short, natural, and friendly (1-2 sentences).`;
-
-      const response = await fetch("/api/chat-roleplay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user_input: text,
-          persona_prompt: introPrompt,
-          voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "EXAVITQu4vr4xnSDxMaL"
-        })
+      const response = await fetch('/api/chat-roleplay', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+        body: JSON.stringify({ user_input: userInput, persona_prompt: introPrompt,
+          voice_id: ELEVENLABS_VOICES[selectedRole.voice] || 'EXAVITQu4vr4xnSDxMaL' })
       });
-
-      const responseTextHeader = response.headers.get("x-response-text");
-      const spokenText = responseTextHeader ? decodeURIComponent(responseTextHeader) : "";
-
-      const contentType = response.headers.get("content-type") || "";
-      const isMissingKey = response.headers.get("x-elevenlabs-missing") === "true";
-      const isError = response.headers.get("x-elevenlabs-error") === "true";
-
-      let finalMsg = spokenText;
-
-      const speakFallback = (msgText: string) => {
-        if (!msgText) return;
-        const synth = window.speechSynthesis;
-        if (synth) {
-          synth.cancel();
-          const utterance = new SpeechSynthesisUtterance(msgText);
-          utterance.lang = "en-US";
-          synth.speak(utterance);
-        }
-      };
-
-      if (isMissingKey || isError || !response.ok || contentType.includes("application/json")) {
-        const data = await response.json().catch(() => ({}));
-        finalMsg = data.text || spokenText;
-        speakFallback(finalMsg);
-      } else {
-        const audioBlob = await response.blob();
-        if (audioBlob.size > 0 && contentType.startsWith("audio/")) {
-          const audioUrl = URL.createObjectURL(audioBlob);
-          try {
-            const audio = new Audio();
-            audio.src = audioUrl;
-            await audio.play();
-            audio.onended = () => URL.revokeObjectURL(audioUrl);
-          } catch {
-            URL.revokeObjectURL(audioUrl);
-            speakFallback(finalMsg);
-          }
-        } else {
-          speakFallback(finalMsg);
-        }
+      if (!response.ok) throw new Error('Conversation request failed');
+      const header = response.headers.get('x-response-text');
+      let finalMsg = header ? decodeURIComponent(header) : '';
+      const contentType = response.headers.get('content-type') || '';
+      let blob: Blob | null = null;
+      if (contentType.includes('application/json')) {
+        const data = await response.json();
+        finalMsg = data.text || finalMsg;
+      } else if (contentType.startsWith('audio/')) {
+        blob = await response.blob();
       }
-
-      setElevenMessages(prev => [...prev, { role: 'model', text: finalMsg }]);
-    } catch (e: any) {
-      console.error(e);
-      setElevenWarning("Using browser speech synthesis fallback.");
+      if (sessionId !== sessionIdRef.current || endedRef.current) return;
+      if (!finalMsg.trim()) throw new Error('No conversation response returned');
+      elevenMessagesRef.current = [...elevenMessagesRef.current, { role: 'model', text: finalMsg }];
+      setElevenMessages(elevenMessagesRef.current);
+      if (blob && blob.size) {
+        stopPlayback();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audioRef.current = audio;
+        audio.onended = () => { URL.revokeObjectURL(url); if (audioRef.current === audio) audioRef.current = null; };
+        try { await audio.play(); } catch {
+          URL.revokeObjectURL(url);
+          if (audioRef.current === audio) audioRef.current = null;
+          if (sessionId === sessionIdRef.current && !endedRef.current) setElevenWarning('Audio playback was blocked.');
+        }
+      } else if (window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') {
+        setElevenWarning('Voice service unavailable; using browser speech.');
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(new SpeechSynthesisUtterance(finalMsg));
+      } else {
+        setElevenWarning('Voice playback is unavailable. Read the response below.');
+      }
+    } catch (e) {
+      if (sessionId === sessionIdRef.current && !endedRef.current) {
+        console.error(e);
+        setElevenWarning('Could not get a response. Please try again.');
+      }
     } finally {
-      setElevenLabsLoading(false);
+      if (turnAbortRef.current === controller) turnAbortRef.current = null;
+      if (sessionId === sessionIdRef.current && !endedRef.current) setElevenLabsLoading(false);
     }
   };
 
@@ -887,15 +864,18 @@ export default function App() {
 
     try {
       const recognition = new SpeechRecognition();
+      const sessionId = sessionIdRef.current;
+      const active = () => recognitionRef.current === recognition && sessionIdRef.current === sessionId && !endedRef.current;
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = "en-US";
 
       recognition.onstart = () => {
-        setIsRecording(true);
+        if (active()) setIsRecording(true);
       };
 
       recognition.onerror = (e: SpeechRecognitionErrorEvent) => {
+        if (!active()) return;
         setIsRecording(false);
         const errType = e?.error;
         if (errType === 'not-allowed') {
@@ -908,10 +888,14 @@ export default function App() {
       };
 
       recognition.onend = () => {
-        setIsRecording(false);
+        if (active()) {
+          recognitionRef.current = null;
+          setIsRecording(false);
+        }
       };
 
       recognition.onresult = async (event: SpeechRecognitionEvent) => {
+        if (!active()) return;
         const transcript = event.results[0][0].transcript;
         if (transcript.trim()) {
           await handleElevenMessage(transcript);
@@ -930,42 +914,6 @@ export default function App() {
       recognitionRef.current.stop();
     }
     setIsRecording(false);
-  };
-
-  const handleElevenGetFeedback = async () => {
-    if (elevenMessages.length === 0) {
-      setElevenWarning("Talk with the partner first or type a message to generate session feedback.");
-      return;
-    }
-    setElevenLabsLoading(true);
-    setElevenWarning(null);
-    try {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: elevenMessages,
-          student_name: studentName,
-          topic_title: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
-          grammar: (mode === 'student' || mode === 'beginner') ? selectedTopic.grammar : selectedGrammarTopic.grammar,
-          vocabulary: (mode === 'student' || mode === 'beginner') ? selectedTopic.vocabulary : selectedGrammarTopic.vocabulary
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to contact feedback server.");
-      }
-
-      const data = await response.json();
-      const feedbackReport = data.feedback || "Unable to compile diagnostics report.";
-      
-      setElevenMessages(prev => [...prev, { role: 'model', text: `\n\n### 🎓 BILINGUAL DIAGNOSTIC REPORT\n\n${feedbackReport}` }]);
-    } catch (e: any) {
-      console.error(e);
-      setElevenWarning("Failed to fetch diagnostics report. Standard fallback active.");
-    } finally {
-      setElevenLabsLoading(false);
-    }
   };
 
   const { bgUrl, isGenerating } = useGeneratedBackground(
@@ -1020,27 +968,6 @@ export default function App() {
     return activeUserTranscript.toLowerCase().includes(cleanWord);
   };
 
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isSessionConnected) {
-      interval = setInterval(() => {
-        setSessionTime(prev => {
-          if (prev <= 1) {
-            clearInterval(interval);
-            setTimeout(() => {
-              handleStop();
-            }, 10);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else {
-      setSessionTime(180);
-    }
-    return () => clearInterval(interval);
-  }, [isSessionConnected]);
-
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -1057,171 +984,185 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem('linguaRole_role', selectedRole.id);
+    const topic = TOPICS.find(t => t.id === selectedRole.topicId);
+    if (topic) setSelectedTopic(topic);
   }, [selectedRole]);
+
+  useEffect(() => {
+    localStorage.setItem('linguaRole_topic', selectedTopic.id);
+  }, [selectedTopic]);
+
+  useEffect(() => {
+    if (mode === 'beginner' && !(selectedRole.id in BEGINNER_DIALOGUES)) {
+      const first = ROLES.find(role => role.id in BEGINNER_DIALOGUES);
+      if (first) setSelectedRole(first);
+    }
+  }, [mode, selectedRole]);
 
   const rollDice = () => {
     playClick();
-    const randomTopic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
-    setSelectedTopic(randomTopic);
+    const roles = mode === 'beginner' ? ROLES.filter(role => role.id in BEGINNER_DIALOGUES) : ROLES;
+    setSelectedRole(roles[Math.floor(Math.random() * roles.length)]);
   };
 
-  const handleStart = async () => {
-    if (mode === 'exercises') return;
-    if (elevenLabsMode) {
-      playStart();
-      setElevenLabsConnected(true);
-      setElevenLabsLoading(true);
-      setElevenMessages([]);
-      setElevenWarning(null);
-      
-      try {
-        const introPrompt = `You are playing the role of ${selectedRole.name}. ${selectedRole.description}. Greet the student named ${studentName} very warmly inside your character context, introducing yourself in exactly 1-2 short sentences.`;
-        
-        const response = await fetch("/api/chat-roleplay", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            user_input: "Hi! Greet me to begin our conversation.",
-            persona_prompt: introPrompt,
-            voice_id: ELEVENLABS_VOICES[selectedRole.voice] || "EXAVITQu4vr4xnSDxMaL"
-          })
-        });
+  const stopPlayback = () => {
+    playbackIdRef.current += 1;
+    window.speechSynthesis?.cancel();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      URL.revokeObjectURL(audioRef.current.src);
+      audioRef.current = null;
+    }
+  };
 
-        const responseTextHeader = response.headers.get("x-response-text");
-        const spokenText = responseTextHeader ? decodeURIComponent(responseTextHeader) : "";
-        
-        const contentType = response.headers.get("content-type") || "";
-        const isMissingKey = response.headers.get("x-elevenlabs-missing") === "true";
-        const isError = response.headers.get("x-elevenlabs-error") === "true";
-        
-        let finalMsg = spokenText;
-
-        const speakFallback = (msgText: string) => {
-          if (!msgText) return;
-          const synth = window.speechSynthesis;
-          if (synth) {
-            synth.cancel();
-            const utterance = new SpeechSynthesisUtterance(msgText);
-            utterance.lang = "en-US";
-            synth.speak(utterance);
-          }
-        };
-
-        if (isMissingKey || isError || !response.ok || contentType.includes("application/json")) {
-          const data = await response.json().catch(() => ({}));
-          finalMsg = data.text || spokenText;
-          speakFallback(finalMsg);
-        } else {
-          const audioBlob = await response.blob();
-          if (audioBlob.size > 0 && contentType.startsWith("audio/")) {
-            const audioUrl = URL.createObjectURL(audioBlob);
-            try {
-              const audio = new Audio();
-              audio.src = audioUrl;
-              await audio.play();
-              audio.onended = () => URL.revokeObjectURL(audioUrl);
-            } catch {
-              URL.revokeObjectURL(audioUrl);
-              speakFallback(finalMsg);
-            }
-          } else {
-            speakFallback(finalMsg);
-          }
-        }
-
-        setElevenMessages([{ role: 'model', text: finalMsg }]);
-      } catch (e: any) {
-        console.error(e);
-        setElevenWarning("Standard speech fallback active.");
-      } finally {
-        setElevenLabsLoading(false);
-      }
+  const speakFeedback = (text: string) => {
+    stopPlayback();
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+      setSpeechWarning('Browser speech is unavailable. You can read the feedback below.');
       return;
     }
-
-    playStart();
-    connect(
-      studentName, 
-      (mode === 'student' || mode === 'beginner') ? selectedRole : null, 
-      (mode === 'student' || mode === 'beginner') ? selectedTopic : selectedGrammarTopic, 
-      (mode === 'beginner' ? 'student' : mode) as 'student' | 'teacher',
-      dailyChallenge
-    );
+    try {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const playbackId = playbackIdRef.current;
+      utterance.lang = 'en-US';
+      utterance.onstart = () => { if (playbackId === playbackIdRef.current) setSpeechWarning(null); };
+      utterance.onerror = () => { if (playbackId === playbackIdRef.current) setSpeechWarning('Speech playback was blocked or unavailable. Try Replay.'); };
+      setSpeechWarning('If playback does not start automatically, select Replay.');
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      setSpeechWarning('Speech playback is unavailable. You can read the feedback below.');
+    }
   };
 
-  const triggerAIFeedback = async (historyData: Message[]) => {
-    setIsGeneratingFeedback(true);
+  const handleStart = () => {
+    if (mode !== 'student' && mode !== 'beginner' && mode !== 'teacher') return;
+    sessionIdRef.current += 1;
+    setSessionGeneration(sessionIdRef.current);
+    endedRef.current = false;
+    feedbackAbortRef.current?.abort();
+    turnAbortRef.current?.abort();
+    turnAbortRef.current = null;
+    stopPlayback();
+    disconnect();
+    setShowFeedback(false);
     setAiFeedbackReport(null);
-    try {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          history: historyData,
-          student_name: studentName,
-          topic_title: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
-          grammar: (mode === 'student' || mode === 'beginner') ? selectedTopic.grammar : selectedGrammarTopic.grammar,
-          vocabulary: (mode === 'student' || mode === 'beginner') ? selectedTopic.vocabulary : selectedGrammarTopic.vocabulary
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to contact feedback server.");
-      }
-
-      const data = await response.json();
-      setAiFeedbackReport(data.feedback || "Unable to compile diagnostics report.");
-    } catch (e: any) {
-      console.error("AI feedback generation error:", e);
-      setAiFeedbackReport("Failed to generate constructive report. Please ensure your GEMINI_API_KEY is configured.");
-    } finally {
-      setIsGeneratingFeedback(false);
+    setFeedbackError(null);
+    setSpeechWarning(null);
+    setIsGeneratingFeedback(false);
+    setRatingAI(0);
+    setRatingTopic(0);
+    setFeedbackText('');
+    setTextInput('');
+    setSessionTime(180);
+    setElevenLabsLoading(false);
+    elevenMessagesRef.current = [];
+    setElevenMessages([]);
+    setElevenWarning(null);
+    playStart();
+    if (elevenLabsMode) {
+      setElevenLabsConnected(true);
+      void handleElevenMessage('Please greet me briefly to begin our conversation.', true);
+    } else {
+      setElevenLabsConnected(false);
+      const sessionRole = mode === 'beginner'
+        ? { ...selectedRole, description: `${selectedRole.description} Use simple beginner-level English, short sentences, and supportive prompts.` }
+        : selectedRole;
+      void connect(studentName, mode === 'teacher' ? null : sessionRole,
+        mode === 'teacher' ? selectedGrammarTopic : selectedTopic,
+        mode === 'teacher' ? 'teacher' : 'student', dailyChallenge);
     }
   };
 
   const handleStop = () => {
-    playClick();
-
-    // Compile dialogue history to send for feedback evaluation
-    const historyData: Message[] = elevenLabsMode
-      ? [...elevenMessages]
-      : [
-          ...(userTranscript ? [{ role: 'user' as const, text: userTranscript }] : []),
-          ...(aiTranscript ? [{ role: 'model' as const, text: aiTranscript }] : [])
-        ];
-
-    if (elevenLabsMode) {
-      setElevenLabsConnected(false);
-    } else {
-      disconnect();
+    if (endedRef.current) return;
+    endedRef.current = true;
+    const sessionId = sessionIdRef.current;
+    const messages = elevenLabsMode ? [...elevenMessagesRef.current] : getTranscript();
+    turnAbortRef.current?.abort();
+    if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
     }
-    
+    setIsRecording(false);
+    setElevenLabsConnected(false);
+    setElevenLabsLoading(false);
+    disconnect();
+    stopPlayback();
     setShowFeedback(true);
-
-    if (historyData.length > 0) {
-      triggerAIFeedback(historyData);
-    } else {
-      setAiFeedbackReport("No conversation turns occurred. Please speak or type to practice with your AI partner before generating feedback!");
-    }
-  };
-
-  const handleRestart = () => {
-    if (mode === 'exercises') return;
-    if (elevenLabsMode) {
-      handleStart();
+    setAiFeedbackReport(null);
+    setFeedbackError(null);
+    setSpeechWarning(null);
+    if (!messages.some(message => message.role === 'user' && message.text.trim())) {
+      setFeedbackError('No learner conversation was recorded. Speak or type before requesting feedback.');
       return;
     }
-    playStart();
-    disconnect();
-    setTimeout(() => {
-      connect(
-        studentName, 
-        (mode === 'student' || mode === 'beginner') ? selectedRole : null, 
-        (mode === 'student' || mode === 'beginner') ? selectedTopic : selectedGrammarTopic, 
-        (mode === 'beginner' ? 'student' : mode) as 'student' | 'teacher',
-        dailyChallenge
-      );
-    }, 500);
+    const controller = new AbortController();
+    feedbackAbortRef.current = controller;
+    const topic = mode === 'teacher' ? selectedGrammarTopic : selectedTopic;
+    setIsGeneratingFeedback(true);
+    void (async () => {
+      try {
+        const response = await fetch('/api/feedback', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: controller.signal,
+          body: JSON.stringify({ messages, role: mode === 'teacher' ? null : selectedRole, topic, mode, student_name: studentName })
+        });
+        if (!response.ok) throw new Error('Feedback request failed');
+        const data = await response.json();
+        if (typeof data.feedback !== 'string' || !data.feedback.trim()) throw new Error('Empty feedback response');
+        if (sessionId !== sessionIdRef.current || controller.signal.aborted) return;
+        setAiFeedbackReport(data.feedback);
+        speakFeedback(data.feedback);
+      } catch (e) {
+        if (sessionId === sessionIdRef.current && !controller.signal.aborted) {
+          console.error('Feedback error:', e);
+          setFeedbackError('Feedback could not be generated. Please try another session.');
+        }
+      } finally {
+        if (sessionId === sessionIdRef.current && !controller.signal.aborted) setIsGeneratingFeedback(false);
+      }
+    })();
+  };
+
+  const handleStopRef = useRef(handleStop);
+  handleStopRef.current = handleStop;
+  useEffect(() => {
+    if (scenarioComplete && isConnected && !endedRef.current) handleStopRef.current();
+  }, [scenarioComplete, isConnected]);
+
+  useEffect(() => {
+    if (!isSessionConnected || endedRef.current) return;
+    const deadline = Date.now() + 180_000;
+    const interval = window.setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+      setSessionTime(remaining);
+      if (!remaining) {
+        window.clearInterval(interval);
+        handleStopRef.current();
+      }
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [isSessionConnected, sessionGeneration]);
+
+  useEffect(() => () => {
+    sessionIdRef.current += 1;
+    feedbackAbortRef.current?.abort();
+    turnAbortRef.current?.abort();
+    stopPlayback();
+    if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.stop();
+    }
+  }, []);
+
+  const handleRestart = () => {
+    if (recognitionRef.current) {
+      recognitionRef.current.onresult = null;
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    setIsRecording(false);
+    handleStart();
   };
 
   const handleSubmitFeedback = () => {
@@ -1239,6 +1180,9 @@ export default function App() {
     const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
     localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
     
+    feedbackAbortRef.current?.abort();
+    setIsGeneratingFeedback(false);
+    stopPlayback();
     setShowFeedback(false);
     setRatingAI(0);
     setRatingTopic(0);
@@ -1468,14 +1412,14 @@ export default function App() {
                 <div className="flex bg-zinc-900/80 p-1 rounded-xl mb-2 border border-zinc-800/50 overflow-x-auto custom-scrollbar gap-1">
                   <button
                     onClick={() => { playClick(); setMode('student'); }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'student' ? 'bg-blue-500 text-black shadow-[0_0_12px_rgba(59,130,246,0.5)] border border-blue-400/50' : 'text-blue-300/60 hover:text-blue-200 hover:bg-blue-500/10'} disabled:opacity-50`}
                   >
                     Student
                   </button>
                   <button
                     onClick={() => { playClick(); setMode('teacher'); }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[80px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'teacher' ? 'bg-emerald-500 text-black shadow-[0_0_12px_rgba(16,185,129,0.5)] border border-emerald-400/50' : 'text-emerald-300/60 hover:text-emerald-200 hover:bg-emerald-500/10'} disabled:opacity-50`}
                   >
                     Teacher
@@ -1487,28 +1431,28 @@ export default function App() {
                       const firstBeginner = ROLES.find(r => r.id in BEGINNER_DIALOGUES);
                       if (firstBeginner) setSelectedRole(firstBeginner);
                     }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'beginner' ? 'bg-purple-500 text-black shadow-[0_0_12px_rgba(139,92,246,0.5)] border border-purple-400/50' : 'text-purple-300/60 hover:text-purple-200 hover:bg-purple-500/10'} disabled:opacity-50`}
                   >
                     Beginner
                   </button>
                   <button
                     onClick={() => { playClick(); setMode('exercises'); }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'exercises' ? 'bg-amber-500 text-black shadow-[0_0_12px_rgba(245,158,11,0.5)] border border-amber-400/50' : 'text-amber-300/60 hover:text-amber-200 hover:bg-amber-500/10'} disabled:opacity-50`}
                   >
                     Exercises
                   </button>
                   <button
                     onClick={() => { playClick(); setMode('progress'); }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[90px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'progress' ? 'bg-red-600 text-white shadow-[0_0_12px_rgba(239,68,68,0.5)] border border-red-500/50' : 'text-red-400/60 hover:text-red-200 hover:bg-red-500/10'} disabled:opacity-50`}
                   >
                     Progress
                   </button>
                   <button
                     onClick={() => { playClick(); setMode('flashcards'); }}
-                    disabled={isConnected || isConnecting}
+                    disabled={isSessionConnected || isSessionConnecting}
                     className={`flex-1 py-2 px-3 min-w-[100px] text-xs sm:text-sm font-black tracking-wider uppercase rounded-lg transition-all ${mode === 'flashcards' ? 'bg-indigo-600 text-white shadow-[0_0_12px_rgba(99,102,241,0.5)] border border-indigo-500/50' : 'text-indigo-400/60 hover:text-indigo-200 hover:bg-indigo-500/10'} disabled:opacity-50`}
                   >
                     Flashcards
@@ -1537,7 +1481,7 @@ export default function App() {
                           Voice Architecture
                         </h4>
                         <p className="text-xs text-blue-300/60 leading-normal">
-                          Choose between standard Live API or ultra high-fidelity neural voices.
+                          Choose Gemini Live or turn-based conversation with ElevenLabs voice.
                         </p>
                       </div>
                       <div className="flex bg-black/60 p-1 rounded-lg border border-zinc-800/50">
@@ -1555,7 +1499,7 @@ export default function App() {
                           onClick={() => { playClick(); setElevenLabsMode(true); }}
                           className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider rounded-md transition-all ${elevenLabsMode ? 'bg-fuchsia-500 text-white shadow-[0_0_8px_rgba(217,70,239,0.4)]' : 'text-fuchsia-400/60 hover:text-fuchsia-300'} disabled:opacity-50`}
                         >
-                          ElevenLabs Pro
+                          ElevenLabs (turn-based)
                         </button>
                       </div>
                     </div>
@@ -1755,7 +1699,7 @@ export default function App() {
                             const topic = GRAMMAR_TOPICS.find(t => t.id === e.target.value);
                             if (topic) setSelectedGrammarTopic(topic);
                           }}
-                          disabled={isConnected || isConnecting}
+                          disabled={isSessionConnected || isSessionConnecting}
                           className="w-full bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all disabled:opacity-50 font-bold"
                         >
                           {GRAMMAR_TOPICS.map(topic => (
@@ -1860,8 +1804,10 @@ export default function App() {
                           return (
                             <button
                               key={idx}
+                              disabled={isGeneratingExercise}
                               onClick={() => {
                                 playClick();
+                                setExerciseNotice(null);
                                 const foundIdx = EXERCISES.findIndex(ex => 
                                   ex.topic.toLowerCase().includes(unit.titleShort?.toLowerCase() || unit.title.toLowerCase())
                                 );
@@ -1938,7 +1884,10 @@ export default function App() {
           <div className="lg:col-span-7 space-y-6">
             {mode === 'exercises' ? (
               <GothicSkullFlowerFrame title="Grammar Exercises" icon={<Briefcase size={20} className={activeTheme.activeIconColor} />} theme={activeTheme}>
-                
+                {exerciseNotice && <p role="status" className="mb-4 text-sm text-amber-300">{exerciseNotice}</p>}
+                <button type="button" onClick={() => void generateNewExercise()} disabled={isGeneratingExercise || (!isBookPurchased && exercisesCompleted >= 5)} className="mb-4 px-4 py-2 rounded-xl border border-amber-500/40 text-amber-300 disabled:opacity-50">
+                  {isGeneratingExercise ? 'Generating exercise…' : 'Generate AI exercise'}
+                </button>
                 {!isBookPurchased && exercisesCompleted >= 5 ? (
                   <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
                     <div className="text-center py-8">
@@ -2292,11 +2241,6 @@ export default function App() {
                               <button
                                 onClick={async () => {
                                   playClick();
-                                  setSpellInput('');
-                                  setSpellHintTriggered(false);
-                                  setSelectedAnswer(null);
-                                  setIncorrectAttempts({});
-                                  
                                   if (isBookPurchased) {
                                     await generateNewExercise();
                                   } else {
@@ -2682,7 +2626,7 @@ export default function App() {
                         {elevenLabsMode ? (
                           <>
                             <Sparkles size={16} className="text-fuchsia-400 animate-pulse" />
-                            Neural Streaming
+                            Turn-based voice
                           </>
                         ) : hasMicrophone ? (
                           <>
@@ -2703,6 +2647,7 @@ export default function App() {
                         <button
                           type="button"
                           onClick={isRecording ? stopVoiceInput : startVoiceInput}
+                          disabled={elevenLabsLoading && !isRecording}
                           className={`p-3.5 rounded-xl transition-all ${
                             isRecording 
                               ? 'bg-red-600 text-white animate-pulse shadow-[0_0_12px_rgba(220,38,38,0.7)]' 
@@ -2727,12 +2672,12 @@ export default function App() {
                             value={textInput}
                             onChange={(e) => setTextInput(e.target.value)}
                             placeholder={elevenLabsLoading ? "Synthesizing character stream..." : "Type your message..."}
-                            disabled={elevenLabsLoading}
+                            disabled={elevenLabsLoading || isRecording}
                             className="flex-1 bg-zinc-900/80 border border-zinc-800/50 text-blue-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all font-medium text-base disabled:opacity-50 placeholder-blue-500/30"
                           />
                           <button
                             type="submit"
-                            disabled={!textInput.trim() || elevenLabsLoading}
+                            disabled={!textInput.trim() || elevenLabsLoading || isRecording}
                             className="bg-blue-500 hover:bg-blue-200 text-black px-5 rounded-xl font-bold tracking-widest uppercase text-base transition-all disabled:opacity-50"
                           >
                             Send
@@ -2791,7 +2736,7 @@ export default function App() {
                         End
                       </button>
                       <button
-                        onClick={elevenLabsMode ? handleElevenGetFeedback : requestFeedback}
+                        onClick={handleStop}
                         className="flex flex-col items-center justify-center gap-1 bg-amber-950/50 hover:bg-amber-900 text-amber-500 border border-amber-900/50 py-3 rounded-2xl font-bold tracking-widest uppercase text-sm transition-all"
                       >
                         <MessageSquare size={16} />
@@ -2862,8 +2807,11 @@ export default function App() {
               </div>
               <button 
                 onClick={() => {
-                  setShowFeedback(false);
-                  setAiFeedbackReport(null);
+                feedbackAbortRef.current?.abort();
+                setIsGeneratingFeedback(false);
+                stopPlayback();
+                setShowFeedback(false);
+                setAiFeedbackReport(null);
                 }}
                 className="text-zinc-500 hover:text-zinc-200 p-1"
               >
@@ -2895,11 +2843,16 @@ export default function App() {
                         </p>
                       </div>
                     </div>
+                  ) : feedbackError ? (
+                    <p role="alert" className="text-amber-300 text-sm">{feedbackError}</p>
                   ) : aiFeedbackReport ? (
-                    <div className="markdown-body text-zinc-300 text-sm space-y-4 leading-relaxed font-sans">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {aiFeedbackReport}
-                      </ReactMarkdown>
+                    <div className="text-zinc-300 text-sm space-y-4 leading-relaxed font-sans">
+                      <div className="flex gap-3">
+                        <button type="button" onClick={() => speakFeedback(aiFeedbackReport)} className="px-3 py-2 rounded-lg bg-blue-500 text-black font-bold">Replay feedback</button>
+                        <button type="button" onClick={stopPlayback} className="px-3 py-2 rounded-lg border border-blue-500 text-blue-200">Stop audio</button>
+                      </div>
+                      {speechWarning && <p role="status" className="text-amber-300">{speechWarning}</p>}
+                      <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{aiFeedbackReport}</ReactMarkdown></div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full text-zinc-500 text-sm">
@@ -2961,20 +2914,9 @@ export default function App() {
                 <div className="flex gap-2.5 pt-4">
                   <button 
                     onClick={() => {
-                      // Save automatically even if they skip writing feedback comments
-                      const feedback = {
-                        date: new Date().toISOString(),
-                        student: mode === 'teacher' ? 'Joshimar (Teacher)' : studentName,
-                        role: selectedRole.name,
-                        topic: (mode === 'student' || mode === 'beginner') ? selectedTopic.title : selectedGrammarTopic.title,
-                        ratingAI: ratingAI || 5,
-                        ratingTopic: ratingTopic || 5,
-                        comments: feedbackText || "Self-study session completed.",
-                        aiReport: aiFeedbackReport
-                      };
-                      const existing = JSON.parse(localStorage.getItem('linguaRole_feedback') || '[]');
-                      localStorage.setItem('linguaRole_feedback', JSON.stringify([...existing, feedback]));
-                      
+                      feedbackAbortRef.current?.abort();
+                      setIsGeneratingFeedback(false);
+                      stopPlayback();
                       setShowFeedback(false);
                       setRatingAI(0);
                       setRatingTopic(0);

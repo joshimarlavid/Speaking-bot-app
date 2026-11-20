@@ -1,4 +1,39 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import type { Message, Role, Topic } from './types';
+
+const SCENARIO_COMPLETE_MARKER = 'Scenario complete.';
+
+// Resample continuously, including across processor buffer boundaries. The browser
+// may ignore the requested AudioContext sample rate.
+function createResampler(rate: number) {
+  let pending = new Float32Array(0);
+  let position = 0;
+  return (input: Float32Array) => {
+    const samples = new Float32Array(pending.length + input.length);
+    samples.set(pending);
+    samples.set(input, pending.length);
+    const output: number[] = [];
+    const step = rate / 16000;
+    while (position + 1 < samples.length) {
+      const index = Math.floor(position);
+      const fraction = position - index;
+      output.push(samples[index] * (1 - fraction) + samples[index + 1] * fraction);
+      position += step;
+    }
+    const consumed = Math.min(Math.floor(position), samples.length);
+    pending = samples.slice(consumed);
+    position -= consumed;
+    const bytes = new Uint8Array(output.length * 2);
+    const view = new DataView(bytes.buffer);
+    output.forEach((sample, index) => {
+      const clamped = Math.max(-1, Math.min(1, sample));
+      view.setInt16(index * 2, clamped < 0 ? clamped * 32768 : clamped * 32767, true);
+    });
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  };
+}
 
 export function useLiveAPI() {
   const [isConnected, setIsConnected] = useState(false);
@@ -7,6 +42,7 @@ export function useLiveAPI() {
   const [userTranscript, setUserTranscript] = useState<string>("");
   const [aiTranscript, setAiTranscript] = useState<string>("");
   const [hasMicrophone, setHasMicrophone] = useState(true);
+  const [scenarioComplete, setScenarioComplete] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -14,76 +50,94 @@ export function useLiveAPI() {
   const streamRef = useRef<MediaStream | null>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
   const nextPlayTimeRef = useRef<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const inputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const gainRef = useRef<GainNode | null>(null);
+  const playbackSourcesRef = useRef(new Set<AudioBufferSourceNode>());
+  const resumePromiseRef = useRef<Promise<void> | null>(null);
+  const generationRef = useRef(0);
+  const playbackGenerationRef = useRef(0);
+  const transcriptRef = useRef<Message[]>([]);
+  const turnOpenRef = useRef(false);
+  const outputTranscriptionRef = useRef(false);
+  const outputTurnRef = useRef('');
+
+  const addTranscript = useCallback((role: Message['role'], text: string, separate = false) => {
+    if (!text) return;
+    const turns = transcriptRef.current;
+    const last = turns[turns.length - 1];
+    if (!separate && turnOpenRef.current && last?.role === role) last.text += text;
+    else turns.push({ role, text });
+    turnOpenRef.current = !separate;
+    setUserTranscript(turns.filter(turn => turn.role === 'user').map(turn => turn.text).join(' '));
+    setAiTranscript(turns.filter(turn => turn.role === 'model').map(turn => turn.text).join('\n'));
+  }, []);
+
+  const stopPlayback = useCallback(() => {
+    playbackGenerationRef.current++;
+    playbackSourcesRef.current.forEach(source => {
+      source.onended = null;
+      try { source.stop(); } catch { /* already stopped */ }
+      try { source.disconnect(); } catch { /* already disconnected */ }
+    });
+    playbackSourcesRef.current.clear();
+    nextPlayTimeRef.current = 0;
+  }, []);
+
+  const cleanupInput = useCallback(() => {
+    if (processorRef.current) processorRef.current.onaudioprocess = null;
+    for (const node of [processorRef.current, inputSourceRef.current, gainRef.current]) {
+      try { node?.disconnect(); } catch { /* already disconnected */ }
+    }
+    processorRef.current = null;
+    inputSourceRef.current = null;
+    gainRef.current = null;
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    const context = inputAudioContextRef.current;
+    inputAudioContextRef.current = null;
+    if (context) { try { void context.close().catch(() => {}); } catch { /* already closed */ } }
+  }, []);
 
   const disconnect = useCallback(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-
-    if (wsRef.current) {
+    generationRef.current++;
+    const ws = wsRef.current;
+    wsRef.current = null;
+    if (ws) {
+      ws.onopen = ws.onmessage = ws.onerror = ws.onclose = null;
       try {
-        wsRef.current.onopen = null;
-        wsRef.current.onmessage = null;
-        wsRef.current.onerror = null;
-        wsRef.current.onclose = null;
-        if (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING) {
-          wsRef.current.close();
-        }
-      } catch {
-        // Ignore close errors
-      }
-      wsRef.current = null;
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+      } catch { /* already closed */ }
     }
-
-    if (processorRef.current) {
-      try {
-        processorRef.current.disconnect();
-      } catch {
-        // Ignore disconnect errors
-      }
-      processorRef.current = null;
-    }
-
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-
-    if (inputAudioContextRef.current) {
-      try {
-        inputAudioContextRef.current.close();
-      } catch {
-        // Ignore close errors
-      }
-      inputAudioContextRef.current = null;
-    }
-
-    if (outputAudioContextRef.current) {
-      try {
-        outputAudioContextRef.current.close();
-      } catch {
-        // Ignore close errors
-      }
-      outputAudioContextRef.current = null;
-    }
-
-    nextPlayTimeRef.current = 0;
+    cleanupInput();
+    stopPlayback();
+    const context = outputAudioContextRef.current;
+    outputAudioContextRef.current = null;
+    resumePromiseRef.current = null;
+    if (context) { try { void context.close().catch(() => {}); } catch { /* already closed */ } }
     setIsConnected(false);
     setIsConnecting(false);
-  }, []);
+  }, [cleanupInput, stopPlayback]);
+
+  useEffect(() => () => { disconnect(); }, [disconnect]);
+  const getTranscript = useCallback((): Message[] => transcriptRef.current.map(turn => ({ ...turn })), []);
 
   const connect = useCallback(async (
     studentName: string,
-    role: any,
-    topic: any,
+    role: Role | null,
+    topic: Topic,
     mode: 'student' | 'teacher' = 'student',
     challenge?: { type: string, content: string }
   ) => {
     disconnect();
+    const generation = generationRef.current;
     setIsConnecting(true);
     setError(null);
+    setHasMicrophone(true);
+    transcriptRef.current = [];
+    turnOpenRef.current = false;
+    outputTranscriptionRef.current = false;
+    outputTurnRef.current = '';
+    setScenarioComplete(false);
     setUserTranscript("");
     setAiTranscript("");
 
@@ -108,8 +162,8 @@ Start by briefly introducing the topic and asking them a question or giving them
 Provide friendly, empathetic, and constructive feedback on their answers.
 
 CRITICAL FOR REAL-TIME VOICE FLUENCY: Speak in very short, concise, and friendly conversational bursts (1 to 2 sentences max). Absolutely do not lecture or output long block paragraphs. Keep the back-and-forth exchange extremely snappy, brief, and lively!`
-        : `You are playing the role of ${role.name}. 
-${role.description}
+        : `You are playing the role of ${role?.name || 'Partner'}.
+${role?.description || ''}
 The user is an English learner. 
 Their name is ${studentName}. Greet the user by their name: ${studentName}.
 Your goal is to have a natural conversation with them in character.
@@ -117,8 +171,8 @@ Try to naturally steer the conversation so they can practice the following gramm
 And these vocabulary words: ${topic.vocabulary.join(', ')}.
 ${challengeInstruction}
 
-The user has a specific goal to WIN this scenario: ${role.winCondition}
-They will LOSE if: ${role.loseCondition}
+The user has a specific goal to WIN this scenario: ${role?.winCondition || ''}
+They will LOSE if: ${role?.loseCondition || ''}
 
 CRITICAL: To achieve the WIN condition, the user MUST successfully use ALL of the targeted vocabulary words during the conversation: ${topic.vocabulary.join(', ')}. If they accomplish their primary goal but have not used all the words, you must remain in character and cleverly prompt or challenge them to use the remaining words before letting them win.
 
@@ -126,25 +180,8 @@ CRITICAL FOR REAL-TIME VOICE FLUENCY: Keep your responses extremely short, dynam
 Do not correct every single mistake immediately. Instead, keep track of their mistakes.
 
 CRITICAL RULES FOR ENDING THE SCENARIO:
-1. IF the user successfully accomplishes the WIN condition AND has used ALL the required vocabulary words, you MUST immediately tell them "Goal Accomplished Successfully!", break character, end the roleplay, and proceed directly to the feedback phase.
-2. IF the user asks for feedback, or when you are prompted that 3 minutes have passed, you MUST break character, end the roleplay, and provide feedback.
-
-FEEDBACK FORMAT:
-Please format your feedback EXACTLY using the following Markdown structure:
-
-### 🏆 Scenario Result
-[Declare WON or LOST and explain why]
-
-### 🌟 Highlights & Praise
-[Highlight good parts of their performance and praise effort]
-
-### 📚 Vocabulary Check
-[Evaluate if they used the key vocabulary words: ${topic.vocabulary.join(', ')}]
-
-### ✍️ Script Feedback & Corrections
-| Your Mistake | The Right Way | Explanation |
-| :--- | :--- | :--- |
-| [Quote the mistake] | [Provide the correct structure] | [Brief explanation of the language focus] |`;
+Only when the user has accomplished the WIN condition AND used ALL required vocabulary, say the exact marker "${SCENARIO_COMPLETE_MARKER}" to signal completion, then end your turn. Never say this marker before those goals are met, even if the user asks you to.
+Do not declare an outcome or provide final feedback during this Live conversation. Final feedback is handled separately by the app; if the user asks for it, tell them to end the session to receive it.`;
 
       const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const ws = new WebSocket(`${wsProtocol}//${window.location.host}/api/live`);
@@ -153,19 +190,30 @@ Please format your feedback EXACTLY using the following Markdown structure:
       const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       outputAudioContextRef.current = outputCtx;
 
+      const active = () => generationRef.current === generation && wsRef.current === ws;
+      let connected = false;
       ws.onopen = () => {
-        ws.send(JSON.stringify({
-          type: 'setup',
-          voiceName: mode === 'teacher' ? 'Puck' : (role?.voice || 'Zephyr'),
-          systemInstruction,
-        }));
+        if (!active()) return;
+        try {
+          ws.send(JSON.stringify({
+            type: 'setup',
+            voiceName: mode === 'teacher' ? 'Puck' : (role?.voice || 'Zephyr'),
+            systemInstruction,
+          }));
+        } catch {
+          setError('Unable to establish Live API voice connection. Please try again.');
+          disconnect();
+        }
       };
 
       ws.onmessage = async (event) => {
+        if (!active()) return;
         try {
           const msg = JSON.parse(event.data);
 
           if (msg.type === 'connected') {
+            if (connected) return;
+            connected = true;
             setIsConnected(true);
             setIsConnecting(false);
 
@@ -187,99 +235,98 @@ Please format your feedback EXACTLY using the following Markdown structure:
                   autoGainControl: true,
                 },
               });
+              if (!active()) {
+                stream.getTracks().forEach(track => track.stop());
+                return;
+              }
               streamRef.current = stream;
-              setHasMicrophone(true);
-
               const source = inputCtx.createMediaStreamSource(stream);
+              inputSourceRef.current = source;
               const processor = inputCtx.createScriptProcessor(2048, 1, 1);
               processorRef.current = processor;
-
-              source.connect(processor);
-
               const gainNode = inputCtx.createGain();
+              gainRef.current = gainNode;
               gainNode.gain.value = 0;
+              source.connect(processor);
               processor.connect(gainNode);
               gainNode.connect(inputCtx.destination);
-
+              if (inputCtx.state === 'suspended') await inputCtx.resume();
+              if (!active()) return;
+              setHasMicrophone(true);
+              const resample = createResampler(inputCtx.sampleRate);
               processor.onaudioprocess = (e) => {
-                if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-                const inputData = e.inputBuffer.getChannelData(0);
-                const pcm16 = new Int16Array(inputData.length);
-                for (let i = 0; i < inputData.length; i++) {
-                  pcm16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-                }
-                const buffer = new ArrayBuffer(pcm16.length * 2);
-                const view = new DataView(buffer);
-                for (let i = 0; i < pcm16.length; i++) {
-                  view.setInt16(i * 2, pcm16[i], true);
-                }
-                const uint8 = new Uint8Array(buffer);
-                let binary = "";
-                for (let i = 0; i < uint8.length; i++) {
-                  binary += String.fromCharCode(uint8[i]);
-                }
-                const base64 = btoa(binary);
-
+                if (!active() || ws.readyState !== WebSocket.OPEN) return;
                 try {
-                  wsRef.current.send(JSON.stringify({ type: 'audio', data: base64 }));
+                  const data = resample(e.inputBuffer.getChannelData(0));
+                  if (data) ws.send(JSON.stringify({ type: 'audio', data }));
                 } catch {
-                  // Ignore transient socket send error
+                  setError('Microphone audio could not be sent. You can continue using text.');
+                  setHasMicrophone(false);
+                  cleanupInput();
                 }
               };
             } catch (micErr) {
+              if (!active()) return;
               console.warn("Microphone not available, continuing in text mode:", micErr);
+              cleanupInput();
               setHasMicrophone(false);
+              setError('Microphone unavailable. You can continue using text.');
             }
-
-            // 3-minute feedback timer
-            timerRef.current = setTimeout(() => {
-              if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-                wsRef.current.send(JSON.stringify({
-                  type: 'text',
-                  text: "3 minutes have passed. Please break character and provide friendly, empathetic, and constructive feedback. Praise the student first. Then, provide specific examples of their mistakes and how to correct them, focusing on only 1-2 key areas for improvement."
-                }));
-                setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
-              }
-            }, 3 * 60 * 1000);
             return;
           }
 
           if (msg.type === 'interrupted') {
-            if (outputAudioContextRef.current) {
-              nextPlayTimeRef.current = outputAudioContextRef.current.currentTime;
-            }
+            stopPlayback();
+            turnOpenRef.current = false;
+            outputTranscriptionRef.current = false;
+            outputTurnRef.current = '';
             return;
           }
 
-          if (msg.type === 'inputTranscript' && msg.text) {
-            if (!msg.text.includes("Greeting trigger:")) {
-              setUserTranscript(prev => (prev ? prev + " " + msg.text : msg.text));
-            }
+          if (msg.type === 'turn_complete' || msg.type === 'turnComplete') {
+            if (outputTurnRef.current.includes(SCENARIO_COMPLETE_MARKER)) setScenarioComplete(true);
+            outputTurnRef.current = '';
+            turnOpenRef.current = false;
+            outputTranscriptionRef.current = false;
             return;
           }
 
-          if ((msg.type === 'outputTranscript' || msg.type === 'text') && msg.text) {
-            setAiTranscript(prev => prev + msg.text);
+          if ((msg.type === 'inputTranscript' || msg.type === 'input_transcription') && typeof msg.text === 'string') {
+            outputTranscriptionRef.current = false;
+            if (!msg.text.includes('Greeting trigger:')) addTranscript('user', msg.text);
+            return;
+          }
+
+          if ((msg.type === 'outputTranscript' || msg.type === 'output_transcription') && typeof msg.text === 'string') {
+            outputTranscriptionRef.current = true;
+            outputTurnRef.current += msg.text;
+            addTranscript('model', msg.text);
+            return;
+          }
+          if (msg.type === 'text' && typeof msg.text === 'string' && !outputTranscriptionRef.current) {
+            addTranscript('model', msg.text);
             return;
           }
 
           if (msg.type === 'audio' && msg.data && outputAudioContextRef.current) {
             try {
               const audioCtx = outputAudioContextRef.current;
+              const playbackGeneration = playbackGenerationRef.current;
               if (audioCtx.state === 'suspended') {
-                await audioCtx.resume();
+                if (!resumePromiseRef.current) resumePromiseRef.current = audioCtx.resume();
+                const pendingResume = resumePromiseRef.current;
+                try { await pendingResume; } finally {
+                  if (resumePromiseRef.current === pendingResume) resumePromiseRef.current = null;
+                }
               }
+              if (!active() || playbackGeneration !== playbackGenerationRef.current) return;
 
               const binaryString = atob(msg.data);
-              const bytes = new Uint8Array(binaryString.length);
-              for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-              }
-              const pcm16 = new Int16Array(bytes.buffer);
-              const float32 = new Float32Array(pcm16.length);
-              for (let i = 0; i < pcm16.length; i++) {
-                float32[i] = pcm16[i] / 32768;
+              if (!binaryString.length || binaryString.length % 2) throw new Error('Invalid PCM audio');
+              const float32 = new Float32Array(binaryString.length / 2);
+              for (let i = 0; i < float32.length; i++) {
+                const sample = binaryString.charCodeAt(i * 2) | (binaryString.charCodeAt(i * 2 + 1) << 8);
+                float32[i] = (sample << 16 >> 16) / 32768;
               }
 
               const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000);
@@ -294,10 +341,18 @@ Please format your feedback EXACTLY using the following Markdown structure:
                 nextPlayTimeRef.current = currentTime;
               }
 
+              playbackSourcesRef.current.add(source);
+              source.onended = () => {
+                playbackSourcesRef.current.delete(source);
+                try { source.disconnect(); } catch { /* already disconnected */ }
+              };
               source.start(nextPlayTimeRef.current);
               nextPlayTimeRef.current += audioBuffer.duration;
             } catch (playErr) {
+              if (!active()) return;
+              stopPlayback();
               console.error("Error playing 24kHz audio chunk:", playErr);
+              setError('Audio playback failed. You can continue using text.');
             }
             return;
           }
@@ -309,27 +364,33 @@ Please format your feedback EXACTLY using the following Markdown structure:
           }
 
           if (msg.type === 'closed') {
+            setError('Live API connection closed unexpectedly. Please try again.');
             disconnect();
           }
         } catch (parseErr) {
           console.error("Error handling Live API message:", parseErr);
+          if (active()) setError('Live API message could not be handled.');
         }
       };
 
       ws.onerror = () => {
+        if (!active()) return;
         setError("Unable to establish Live API voice connection. Please try again.");
         disconnect();
       };
 
       ws.onclose = () => {
+        if (!active()) return;
+        setError('Live API connection closed unexpectedly. Please try again.');
         disconnect();
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to connect:", err);
-      setError(err.message || "Failed to connect to Live API");
-      setIsConnecting(false);
+      if (generationRef.current !== generation) return;
+      disconnect();
+      setError(err instanceof Error ? err.message : 'Failed to connect to Live API');
     }
-  }, [disconnect]);
+  }, [disconnect, cleanupInput, stopPlayback, addTranscript]);
 
   const requestFeedback = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -338,26 +399,26 @@ Please format your feedback EXACTLY using the following Markdown structure:
           type: 'text',
           text: "Please break character and provide friendly, empathetic, and constructive feedback. Praise the student first. Then, provide specific examples of their mistakes and how to correct them, focusing on only 1-2 key areas for improvement."
         }));
-        setAiTranscript(prev => prev + "\n\n--- FEEDBACK ---\n\n");
+        turnOpenRef.current = false;
       } catch (e) {
+        setError('Failed to request feedback.');
         console.error("Failed to request feedback", e);
       }
     }
   }, []);
 
   const sendTextMessage = useCallback((text: string) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    if (text.trim() && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       try {
-        wsRef.current.send(JSON.stringify({
-          type: 'text',
-          text,
-        }));
-        setUserTranscript(prev => (prev ? prev + " " + text : text));
+        wsRef.current.send(JSON.stringify({ type: 'text', text }));
+        outputTranscriptionRef.current = false;
+        addTranscript('user', text, true);
       } catch (e) {
+        setError('Failed to send text message.');
         console.error("Failed to send text message", e);
       }
     }
-  }, []);
+  }, [addTranscript]);
 
   return {
     isConnected,
@@ -366,9 +427,11 @@ Please format your feedback EXACTLY using the following Markdown structure:
     userTranscript,
     aiTranscript,
     hasMicrophone,
+    scenarioComplete,
     connect,
     disconnect,
     requestFeedback,
-    sendTextMessage
+    sendTextMessage,
+    getTranscript
   };
 }
