@@ -17,6 +17,8 @@ export interface Exercise {
   answer: number;
   explanation: string;
   pronunciation?: string;
+}
+
 export interface Role {
   id?: string;
   name: string;

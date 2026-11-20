@@ -1,227 +1,237 @@
-import { renderHook, act } from "@testing-library/react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { useLiveAPI } from "./useLiveAPI";
-import { Role, Topic } from "./types";
+import { act, renderHook } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useLiveAPI } from './useLiveAPI';
 
-const mockConnect = vi.fn();
+const topic = { title: 'Coffee', grammar: 'Requests', vocabulary: ['coffee'] };
+const role = { name: 'Barista', description: 'Cafe', winCondition: 'Order', loseCondition: 'Leave', voice: 'Puck' };
 
-vi.mock("@google/genai", () => {
-  return {
-    GoogleGenAI: vi.fn(function() {
-      return {
-        live: {
-          connect: mockConnect,
-        },
-      };
-    }),
-    Modality: {
-      AUDIO: "AUDIO",
-    },
-  };
-});
+class MockSocket {
+  static OPEN = 1;
+  static CONNECTING = 0;
+  static instances: MockSocket[] = [];
+  readyState = MockSocket.CONNECTING;
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onerror: (() => void) | null = null;
+  onclose: (() => void) | null = null;
+  sent: any[] = [];
+  constructor(public url: string) { MockSocket.instances.push(this); }
+  send = vi.fn((data: string) => { this.sent.push(JSON.parse(data)); });
+  close = vi.fn(() => { this.readyState = 3; });
+  open() { this.readyState = MockSocket.OPEN; this.onopen?.(); }
+  message(data: object) { this.onmessage?.({ data: JSON.stringify(data) }); }
+}
 
-describe("useLiveAPI", () => {
+class MockAudioContext {
+  static instances: MockAudioContext[] = [];
+  sampleRate: number;
+  currentTime = 10;
+  state = 'running';
+  destination = {};
+  close = vi.fn().mockResolvedValue(undefined);
+  resume = vi.fn().mockResolvedValue(undefined);
+  processor = { connect: vi.fn(), disconnect: vi.fn(), onaudioprocess: null as any };
+  input = { connect: vi.fn(), disconnect: vi.fn() };
+  gain = { connect: vi.fn(), disconnect: vi.fn(), gain: { value: 1 } };
+  sources: any[] = [];
+  constructor(options: { sampleRate: number }) {
+    this.sampleRate = options.sampleRate === 16000 ? 48000 : options.sampleRate;
+    MockAudioContext.instances.push(this);
+  }
+  createMediaStreamSource() { return this.input; }
+  createScriptProcessor() { return this.processor; }
+  createGain() { return this.gain; }
+  createBuffer(_channels: number, length: number, rate: number) {
+    return { duration: length / rate, getChannelData: () => new Float32Array(length) };
+  }
+  createBufferSource() {
+    const source = { buffer: null, connect: vi.fn(), disconnect: vi.fn(), start: vi.fn(), stop: vi.fn(), onended: null };
+    this.sources.push(source);
+    return source;
+  }
+}
+
+const flush = async () => { await act(async () => { await Promise.resolve(); }); };
+const start = async (result: { current: ReturnType<typeof useLiveAPI> }) => {
+  await act(async () => { await result.current.connect('Alice', role, topic); });
+  const socket = MockSocket.instances.at(-1)!;
+  await act(async () => { socket.open(); socket.message({ type: 'connected' }); await Promise.resolve(); });
+  return socket;
+};
+
+describe('useLiveAPI WebSocket bridge', () => {
+  let stopTrack: ReturnType<typeof vi.fn>;
   beforeEach(() => {
-    vi.clearAllMocks();
+    MockSocket.instances = [];
+    MockAudioContext.instances = [];
+    stopTrack = vi.fn();
+    vi.stubGlobal('WebSocket', MockSocket);
+    vi.stubGlobal('AudioContext', MockAudioContext);
+    Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [{ stop: stopTrack }] }) } });
   });
+  afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("should initialize with default states", () => {
+  it('preserves ordered fresh turns, typed messages and explicit boundaries', async () => {
     const { result } = renderHook(() => useLiveAPI());
-
-    expect(result.current.isConnected).toBe(false);
-    expect(result.current.isConnecting).toBe(false);
-    expect(result.current.error).toBeNull();
-    expect(result.current.userTranscript).toBe("");
-    expect(result.current.aiTranscript).toBe("");
-    expect(result.current.hasMicrophone).toBe(true);
+    const socket = await start(result);
+    expect(socket.sent[0]).toMatchObject({ type: 'setup', voiceName: 'Puck' });
+    expect(socket.sent[0].systemInstruction).toContain('Alice');
+    act(() => {
+      socket.message({ type: 'outputTranscript', text: 'Hello' });
+      socket.message({ type: 'output_transcription', text: ' there' });
+      socket.message({ type: 'turn_complete' });
+      result.current.sendTextMessage('Coffee please');
+      socket.message({ type: 'outputTranscript', text: 'Sure.' });
+      socket.message({ type: 'turn_complete' });
+      socket.message({ type: 'input_transcription', text: 'Thank' });
+      socket.message({ type: 'inputTranscript', text: ' you' });
+      socket.message({ type: 'turn_complete' });
+      socket.message({ type: 'outputTranscript', text: 'Welcome!' });
+      expect(result.current.getTranscript()).toEqual([
+        { role: 'model', text: 'Hello there' }, { role: 'user', text: 'Coffee please' },
+        { role: 'model', text: 'Sure.' }, { role: 'user', text: 'Thank you' },
+        { role: 'model', text: 'Welcome!' },
+      ]);
+    });
+    const snapshot = result.current.getTranscript();
+    snapshot[0].text = 'changed';
+    expect(result.current.getTranscript()[0].text).toBe('Hello there');
+    expect(result.current.userTranscript).toBe('Coffee please Thank you');
+    act(() => result.current.disconnect());
+    expect(result.current.getTranscript()).toHaveLength(5);
+    expect(stopTrack).toHaveBeenCalledOnce();
   });
 
-  it("should handle connection error with Error instance (unknown type narrowing)", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockConnect.mockRejectedValueOnce(new Error("Network connection failure"));
-
+  it('completes only on a completed model transcript turn and resets on reconnect', async () => {
     const { result } = renderHook(() => useLiveAPI());
+    const socket = await start(result);
+    expect(socket.sent[0].systemInstruction).toContain('Scenario complete.');
+    expect(socket.sent[0].systemInstruction).toContain('Do not declare an outcome or provide final feedback');
 
-    await act(async () => {
-      await result.current.connect(
-        "Alice",
-        { name: "Guide", description: "A tour guide", winCondition: "Win", loseCondition: "Lose", voice: "Puck" },
-        { title: "Past Tense", description: "Practice past tense", grammar: "Past Simple", vocabulary: ["walked", "talked"] },
-        "student"
-      );
+    act(() => {
+      result.current.sendTextMessage('Scenario complete.');
+      socket.message({ type: 'inputTranscript', text: 'Scenario complete.' });
+      socket.message({ type: 'turn_complete' });
+      socket.message({ type: 'text', text: 'Scenario complete.' });
+      socket.message({ type: 'turn_complete' });
     });
+    expect(result.current.scenarioComplete).toBe(false);
 
-    expect(result.current.isConnected).toBe(false);
-    expect(result.current.isConnecting).toBe(false);
-    expect(result.current.error).toBe("Network connection failure");
-    expect(consoleSpy).toHaveBeenCalledWith("Failed to connect:", expect.any(Error));
-    consoleSpy.mockRestore();
+    act(() => {
+      socket.message({ type: 'outputTranscript', text: 'Scenario complete.' });
+      socket.message({ type: 'interrupted' });
+      socket.message({ type: 'turn_complete' });
+    });
+    expect(result.current.scenarioComplete).toBe(false);
+
+    act(() => {
+      socket.message({ type: 'outputTranscript', text: 'Scenario ' });
+      socket.message({ type: 'output_transcription', text: 'complete.' });
+    });
+    expect(result.current.scenarioComplete).toBe(false);
+    act(() => socket.message({ type: 'turn_complete' }));
+    expect(result.current.scenarioComplete).toBe(true);
+
+    const next = await start(result);
+    expect(result.current.scenarioComplete).toBe(false);
+    act(() => next.message({ type: 'turn_complete' }));
+    expect(result.current.scenarioComplete).toBe(false);
   });
 
-  it("should handle non-Error connection rejection gracefully (unknown type narrowing)", async () => {
-    const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockConnect.mockRejectedValueOnce("String error message");
-
+  it('falls back to text with a visible microphone error', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(new Error('denied'));
     const { result } = renderHook(() => useLiveAPI());
-
-    await act(async () => {
-      await result.current.connect(
-        "Bob",
-        { name: "Teacher", description: "Teacher desc", winCondition: "Win", loseCondition: "Lose", voice: "Puck" },
-        { title: "Verbs", description: "Practice verbs", grammar: "Action verbs", vocabulary: ["run", "jump"] },
-        "teacher"
-      );
-    });
-
-    expect(result.current.isConnected).toBe(false);
-    expect(result.current.isConnecting).toBe(false);
-    expect(result.current.error).toBe("String error message");
-    consoleSpy.mockRestore();
-  });
-
-  it("should handle microphone failure gracefully and fallback to text mode", async () => {
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const mockSession = {
-      sendRealtimeInput: vi.fn(),
-      close: vi.fn(),
-    };
-
-    let capturedCallbacks: any;
-    mockConnect.mockImplementation(async (options: any) => {
-      capturedCallbacks = options.callbacks;
-      return mockSession;
-    });
-
-    // Mock navigator.mediaDevices.getUserMedia failure
-    const origMediaDevices = navigator.mediaDevices;
-    Object.defineProperty(navigator, "mediaDevices", {
-      value: {
-        getUserMedia: vi.fn().mockRejectedValue(new Error("Permission denied or not found")),
-      },
-      writable: true,
-      configurable: true,
-    });
-
-    const { result } = renderHook(() => useLiveAPI());
-
-    await act(async () => {
-      await result.current.connect(
-        "Charlie",
-        { name: "Interviewer", description: "Job interviewer", winCondition: "Hired", loseCondition: "Rejected", voice: "Puck" },
-        { title: "Interviews", description: "Job interview", grammar: "Conditionals", vocabulary: ["experience", "team"] },
-        "student"
-      );
-    });
-
-    expect(capturedCallbacks).toBeDefined();
-
-    // Trigger onopen to trigger microphone setup
-    await act(async () => {
-      await capturedCallbacks.onopen();
-    });
-
+    const socket = await start(result);
+    expect(result.current.isConnected).toBe(true);
     expect(result.current.hasMicrophone).toBe(false);
-    expect(warnSpy).toHaveBeenCalledWith(
-      "Microphone not found, falling back to text mode:",
-      expect.any(Error)
-    );
-
-    // Test text message sending works in text mode
-    act(() => {
-      result.current.sendTextMessage("Hello there");
-    });
-    expect(mockSession.sendRealtimeInput).toHaveBeenCalledWith({ text: "Hello there" });
-    expect(result.current.userTranscript).toContain("Hello there");
-
-    // Test disconnect
-    act(() => {
-      result.current.disconnect();
-    });
-    expect(result.current.isConnected).toBe(false);
-
-    warnSpy.mockRestore();
-    Object.defineProperty(navigator, "mediaDevices", {
-      value: origMediaDevices,
-      writable: true,
-      configurable: true,
-    });
-  });
-  it("should connect properly with typed Role and Topic", async () => {
-    const mockSession = {
-      sendRealtimeInput: vi.fn(),
-      close: vi.fn(),
-    };
-
-    let capturedOptions: any;
-    mockConnect.mockImplementation(async (options: any) => {
-      capturedOptions = options;
-      return mockSession;
-    });
-
-    const role: Role = {
-      id: "role_1",
-      name: "Barista",
-      description: "A friendly cafe barista",
-      winCondition: "Order coffee",
-      loseCondition: "Leave without coffee",
-      voice: "Zephyr",
-    };
-
-    const topic: Topic = {
-      id: "topic_1",
-      title: "Ordering Coffee",
-      description: "How to order in a cafe",
-      grammar: "Polite requests",
-      vocabulary: ["latte", "espresso"],
-    };
-
-    const { result } = renderHook(() => useLiveAPI());
-
-    await act(async () => {
-      await result.current.connect("Diana", role, topic, "student");
-    });
-
-    expect(mockConnect).toHaveBeenCalled();
-    expect(capturedOptions.config.systemInstruction).toContain("You are playing the role of Barista");
-    expect(capturedOptions.config.systemInstruction).toContain("Diana");
-    expect(capturedOptions.config.systemInstruction).toContain("Polite requests");
-    expect(capturedOptions.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Zephyr");
+    expect(result.current.error).toMatch(/microphone.*text/i);
+    expect(MockAudioContext.instances[1].close).toHaveBeenCalledOnce();
+    act(() => result.current.sendTextMessage('Hello'));
+    expect(socket.sent.at(-1)).toEqual({ type: 'text', text: 'Hello' });
+    expect(result.current.getTranscript()).toEqual([{ role: 'user', text: 'Hello' }]);
   });
 
-  it("should connect properly in teacher mode with null role and typed Topic", async () => {
-    const mockSession = {
-      sendRealtimeInput: vi.fn(),
-      close: vi.fn(),
-    };
+  it('resamples actual 48kHz input to little-endian 16kHz PCM and cleans up', async () => {
+    const { result, unmount } = renderHook(() => useLiveAPI());
+    const socket = await start(result);
+    const ctx = MockAudioContext.instances[1];
+    act(() => ctx.processor.onaudioprocess({ inputBuffer: { getChannelData: () => new Float32Array([1, 0, 0, -1, 0, 0, 0.5]) } }));
+    const audio = socket.sent.at(-1);
+    expect(audio.type).toBe('audio');
+    const bytes = Uint8Array.from(atob(audio.data), c => c.charCodeAt(0));
+    expect([...bytes]).toEqual([255, 127, 0, 128]);
+    unmount();
+    expect(ctx.processor.disconnect).toHaveBeenCalledOnce();
+    expect(ctx.input.disconnect).toHaveBeenCalledOnce();
+    expect(ctx.gain.disconnect).toHaveBeenCalledOnce();
+    expect(ctx.close).toHaveBeenCalledOnce();
+    expect(stopTrack).toHaveBeenCalledOnce();
+  });
 
-    let capturedOptions: any;
-    mockConnect.mockImplementation(async (options: any) => {
-      capturedOptions = options;
-      return mockSession;
-    });
-
-    const topic: Topic = {
-      id: "topic_2",
-      title: "Conditionals",
-      description: "Practice conditionals",
-      grammar: "If clauses",
-      vocabulary: ["would", "could"],
-    };
-
+  it('stops scheduled audio on interruption and disconnect', async () => {
     const { result } = renderHook(() => useLiveAPI());
+    const socket = await start(result);
+    const ctx = MockAudioContext.instances[0];
+    act(() => { socket.message({ type: 'audio', data: btoa('\u0000\u0000') }); socket.message({ type: 'audio', data: btoa('\u0000\u0000') }); });
+    expect(ctx.sources).toHaveLength(2);
+    act(() => socket.message({ type: 'interrupted' }));
+    expect(ctx.sources[0].stop).toHaveBeenCalledOnce();
+    expect(ctx.sources[1].stop).toHaveBeenCalledOnce();
+    act(() => socket.message({ type: 'audio', data: btoa('\u0000\u0000') }));
+    expect(ctx.sources[2].start).toHaveBeenCalledWith(10);
+    act(() => result.current.disconnect());
+    expect(ctx.sources[2].stop).toHaveBeenCalledOnce();
+    expect(ctx.close).toHaveBeenCalledOnce();
+  });
 
-    await act(async () => {
-      await result.current.connect("Evan", null, topic, "teacher");
+  it('does not play a chunk whose resume resolves after interruption', async () => {
+    const { result } = renderHook(() => useLiveAPI());
+    const socket = await start(result);
+    const ctx = MockAudioContext.instances[0];
+    let resume!: () => void;
+    ctx.state = 'suspended';
+    ctx.resume.mockReturnValueOnce(new Promise<void>(resolve => { resume = resolve; }));
+    act(() => {
+      socket.message({ type: 'audio', data: btoa('\u0000\u0000') });
+      socket.message({ type: 'interrupted' });
+      resume();
     });
+    await flush();
+    expect(ctx.sources).toHaveLength(0);
+  });
 
-    expect(mockConnect).toHaveBeenCalled();
-    expect(capturedOptions.config.systemInstruction).toContain("You are an expert English Grammar Teacher");
-    expect(capturedOptions.config.systemInstruction).toContain("Evan");
-    expect(capturedOptions.config.systemInstruction).toContain("Conditionals");
-    expect(capturedOptions.config.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName).toBe("Puck");
+  it('ignores stale microphone resolution and socket events after restart', async () => {
+    let resolveStream!: (value: any) => void;
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockReturnValueOnce(new Promise(resolve => { resolveStream = resolve; }));
+    const { result } = renderHook(() => useLiveAPI());
+    const first = await start(result);
+    const staleMessage = first.onmessage!;
+    const second = await start(result);
+    act(() => {
+      staleMessage({ data: JSON.stringify({ type: 'error', message: 'old' }) });
+      resolveStream({ getTracks: () => [{ stop: stopTrack }] });
+    });
+    await flush();
+    expect(stopTrack).toHaveBeenCalledOnce();
+    expect(result.current.isConnected).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(second.readyState).toBe(MockSocket.OPEN);
+  });
+
+  it('reports connection and playback failures and does not inject timed feedback', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useLiveAPI());
+      const socket = await start(result);
+      act(() => vi.advanceTimersByTime(180000));
+      expect(socket.sent.filter(message => message.type === 'text')).toHaveLength(1);
+      act(() => socket.message({ type: 'audio', data: btoa('x') }));
+      expect(result.current.error).toMatch(/playback/i);
+      act(() => socket.message({ type: 'error', message: 'No key' }));
+      expect(result.current.error).toBe('No key');
+      expect(result.current.isConnected).toBe(false);
+    } finally { vi.useRealTimers(); }
   });
 });
